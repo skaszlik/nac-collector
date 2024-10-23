@@ -1,0 +1,16 @@
+/*.json
+#/endpoints*.yaml
+!examples/*.json
+!examples/endpoints*.yaml
+tmp/
+.envrc
+.DS_Store
+.pylintrc
+.vscode
+terraform*
+
+# pyenv
+.python-version
+__pycache__/
+
+.idea
