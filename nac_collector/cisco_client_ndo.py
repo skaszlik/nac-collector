@@ -1,4 +1,5 @@
 import logging
+import os
 
 import requests
 import urllib3
@@ -59,7 +60,7 @@ class CiscoClientNDO(CiscoClient):
         return True
 
     def get_from_endpoints(self, endpoints_yaml_file):
-        if endpoints_yaml_file:
+        if os.path.isfile(endpoints_yaml_file):
             with open(endpoints_yaml_file, "r", encoding="utf-8") as f:
                 endpoints = self.yaml.load(f)
         else:
@@ -128,4 +129,6 @@ class CiscoClientNDO(CiscoClient):
                         r.append(data)
 
                     final_dict.update({endpoint["name"]: r})
+        return final_dict
+        return final_dict
         return final_dict
