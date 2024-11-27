@@ -25,7 +25,7 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
     SOLUTION = "catalystcenter"
 
     "Used for mapping credentials to the correct endpoint"
-    mappings = {"credentials_snmpv2_read" : "snmpV2cRead", "credentials_snmpv2_write" : "snmpV2cWrite"}
+    mappings = {"credentials_snmpv3" : "snmpV3", "credentials_snmpv2_read" : "snmpV2cRead", "credentials_snmpv2_write" : "snmpV2cWrite", "credentials_cli" : "cliCredential" , "credentials_https_read" : "httpsRead", "credentials_https_write" : "httpsWrite" }
 
     def __init__(
         self,
@@ -110,18 +110,16 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
             )
         elif isinstance(data.get("response"), dict):
             for k,v in data.get("response").items():
-                if self.mappings(endpoint["name"]) == k:
-                    print(k,v)
-                    print(endpoint["name"])
-                    input("WWWWWWWWWW")
-            endpoint_dict[endpoint["name"]].append(
-                {
-                    "data": v,
-                    "endpoint": endpoint["endpoint"]
-                    + "/"
-                    + self.get_id_value(data.get("response")),
-                }
-            )
+                if self.mappings[endpoint["name"]] == k:
+                    for i in v:
+                        endpoint_dict[endpoint["name"]].append(
+                            {
+                                "data": i,
+                                "endpoint": endpoint["endpoint"]
+                                + "/"
+                                + self.get_id_value(i),
+                            }
+                        )
         elif data.get("response"):
             for i in data.get("response"):
                 endpoint_dict[endpoint["name"]].append(
@@ -280,8 +278,6 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
         Returns:
             str or None: The 'id' or 'name' value if it exists, None otherwise.
         """
-        print(i)
-        input("DDDD")
         try:
             id_value = i["id"]
         except KeyError:

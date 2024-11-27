@@ -34,8 +34,8 @@
 #   endpoint: /dna/intent/api/v1/reserve-ip-subpool
 # - name: ip_pool
 #   endpoint: /api/v2/ippool
-# - name: credentials_snmpv2_read
-#   endpoint: /dna/intent/api/v2/global-credential
+- name: credentials_snmpv2_read
+  endpoint: /dna/intent/api/v2/global-credential
 # - name: pnp_import_devices
 #   endpoint: /dna/intent/api/v1/onboarding/pnp-device/import
 # - name: fabric_device
@@ -52,10 +52,10 @@
 #   endpoint: /dna/intent/api/v2/service-provider
 # - name: network
 #   endpoint: /dna/intent/api/v2/network
-# - name: credentials_https_read
-#   endpoint: /dna/intent/api/v2/global-credential
-# - name: credentials_snmpv3
-#   endpoint: /dna/intent/api/v2/global-credential
+- name: credentials_https_read
+  endpoint: /dna/intent/api/v2/global-credential
+- name: credentials_snmpv3
+  endpoint: /dna/intent/api/v2/global-credential
 # - name: assign_credentials
 #   endpoint: /dna/intent/api/v2/credential-to-site
 # - name: device_detail
@@ -92,8 +92,8 @@
 #   endpoint: /dna/intent/api/v2/template-programmer/template/deploy
 # - name: pnp_device
 #   endpoint: /dna/intent/api/v1/onboarding/pnp-device
-# - name: anycast_gateway
-#   endpoint: /dna/intent/api/v1/sda/anycastGateways
+- name: anycast_gateway
+  endpoint: /dna/intent/api/v1/sda/anycastGateways
 # - name: network_devices
 #   endpoint: /dna/intent/api/v1/network-device
 # - name: site
