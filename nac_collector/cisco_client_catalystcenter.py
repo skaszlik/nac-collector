@@ -25,7 +25,14 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
     SOLUTION = "catalystcenter"
 
     "Used for mapping credentials to the correct endpoint"
-    mappings = {"credentials_snmpv3" : "snmpV3", "credentials_snmpv2_read" : "snmpV2cRead", "credentials_snmpv2_write" : "snmpV2cWrite", "credentials_cli" : "cliCredential" , "credentials_https_read" : "httpsRead", "credentials_https_write" : "httpsWrite" }
+    mappings = {
+        "credentials_snmpv3": "snmpV3",
+        "credentials_snmpv2_read": "snmpV2cRead",
+        "credentials_snmpv2_write": "snmpV2cWrite",
+        "credentials_cli": "cliCredential",
+        "credentials_https_read": "httpsRead",
+        "credentials_https_write": "httpsWrite",
+    }
 
     def __init__(
         self,
@@ -54,7 +61,7 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
         headers = {
             "Accept": "application/json",
             "Content-Type": "application/json",
-            "Authorization": "application/json"
+            "Authorization": "application/json",
         }
         response = requests.post(
             auth_url,
@@ -63,7 +70,7 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
             verify=self.ssl_verify,
             timeout=self.timeout,
         )
-            
+
         if response and response.status_code == 200:
             logger.info("Authentication Successful for URL: %s", auth_url)
 
@@ -109,7 +116,7 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
                 {"data": data, "endpoint": endpoint["endpoint"]}
             )
         elif isinstance(data.get("response"), dict):
-            for k,v in data.get("response").items():
+            for k, v in data.get("response").items():
                 if self.mappings[endpoint["name"]] == k:
                     for i in v:
                         endpoint_dict[endpoint["name"]].append(
