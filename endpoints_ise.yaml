@@ -46,6 +46,8 @@
   endpoint: /ers/config/downloadableacl
 - name: network_access_authorization_global_exception_rule
   endpoint: /api/v1/policy/network-access/policy-set/global-exception
+- name: sxp_domain_filter
+  endpoint: /ers/config/filterpolicy
 - name: internal_user
   endpoint: /ers/config/internaluser
 - name: network_device
