@@ -136,18 +136,6 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
                     }
                 )
 
-        # Pagination for ERS API results
-        elif data.get("SearchResult"):
-            ers_data = self.process_ers_api_results(data)
-
-            for i in ers_data:
-                endpoint_dict[endpoint["name"]].append(
-                    {
-                        "data": i,
-                        "endpoint": endpoint["endpoint"] + "/" + self.get_id_value(i),
-                    }
-                )
-
         return endpoint_dict  # Return the processed endpoint dictionary
 
     def get_from_endpoints(self, endpoints_yaml_file):
@@ -240,40 +228,6 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
                 final_dict.update(endpoint_dict)
         return final_dict
 
-    def process_ers_api_results(self, data):
-        """
-        Process ERS API results and handle pagination.
-
-        Parameters:
-            data (dict): The data received from the ERS API.
-
-        Returns:
-            ers_data (list): The processed data.
-        """
-        # Pagination for ERS API results
-        paginated_data = data["SearchResult"]["resources"]
-        # Loop through all pages until there are no more pages
-        while data["SearchResult"].get("nextPage"):
-            url = data["SearchResult"]["nextPage"]["href"]
-            # Send a GET request to the URL
-            response = self.get_request(url)
-            # Get the JSON content of the response
-            data = response.json()
-            paginated_data.extend(data["SearchResult"]["resources"])
-
-        # For ERS API retrieve details querying all elements from paginated_data
-        ers_data = []
-        for element in paginated_data:
-            url = element["link"]["href"]
-            response = self.get_request(url)
-            # Get the JSON content of the response
-            data = response.json()
-
-            for _, value in data.items():
-                ers_data.append(value)
-
-        return ers_data
-
     @staticmethod
     def get_id_value(i):
         """
@@ -289,11 +243,8 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
             id_value = i["id"]
         except KeyError:
             try:
-                id_value = i["rule"]["id"]
+                id_value = i["name"]
             except KeyError:
-                try:
-                    id_value = i["name"]
-                except KeyError:
-                    id_value = None
+                id_value = None
 
         return id_value
