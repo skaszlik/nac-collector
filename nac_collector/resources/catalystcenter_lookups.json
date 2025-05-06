@@ -1,0 +1,50 @@
+{
+    "/dna/intent/api/v1/sda/fabricDevices": {
+        "source_endpoint": "/dna/intent/api/v1/sda/fabricSites?limit=500",
+        "source_key": "id",
+        "target_endpoint": "/dna/intent/api/v1/sda/fabricDevices?fabricId=%v",
+        "target_key": "siteId"
+    },
+    "/dna/intent/api/v1/sda/fabricDevices/layer2Handoffs": {
+        "source_endpoint": "/dna/intent/api/v1/sda/fabricSites?limit=500",
+        "source_key": "id",
+        "target_endpoint": "/dna/intent/api/v1/sda/fabricDevices/layer2Handoffs?fabricId=%v",
+        "target_key": "fabricId"
+    },
+    "/dna/intent/api/v1/sda/fabricDevices/layer3Handoffs/ipTransits": {
+        "source_endpoint": "/dna/intent/api/v1/sda/fabricSites?limit=500",
+        "source_key": "id",
+        "target_endpoint": "/dna/intent/api/v1/sda/fabricDevices/layer3Handoffs/ipTransits?fabricId=%v",
+        "target_key": "siteId"
+    },
+    "/dna/intent/api/v1/virtual-network": {
+        "source_endpoint": "/dna/intent/api/v1/sda/multicast/virtualNetworks",
+        "source_key": "virtualNetworkName",
+        "target_endpoint": "/dna/intent/api/v1/virtual-network?virtualNetworkName=%v",
+        "target_key": "virtualNetworkName"
+    },
+    "/dna/intent/api/v1/template-programmer/template/version": {
+        "source_endpoint": "/dna/intent/api/v2/template-programmer/project",
+        "source_key": "id",
+        "target_endpoint": "/dna/intent/api/v1/template-programmer/template/version/%v",
+        "target_key": "templateId"
+    },
+    "/dna/intent/api/v1/business/sda/authentication-profile": {
+        "source_endpoint": "/dna/intent/api/v1/site",
+        "source_key": "siteNameHierarchy",
+        "target_endpoint": "/dna/intent/api/v1/business/sda/authentication-profile?siteNameHierarchy=%v",
+        "target_key": "siteNameHierarchy"
+    },
+    "/dna/intent/api/v2/credential-to-site": {
+        "source_endpoint": "/dna/intent/api/v1/site",
+        "source_key": "id",
+        "target_endpoint": "/dna/intent/api/v1/sites/%v/deviceCredentials",
+        "target_key": "siteId"
+    },
+    "/dna/intent/api/v1/reserve-ip-subpool": {
+        "source_endpoint": "/dna/intent/api/v1/site",
+        "source_key": "id",
+        "target_endpoint": "/dna/intent/api/v1/reserve-ip-subpool?siteId=%v",
+        "target_key": "siteId"
+    }
+}
