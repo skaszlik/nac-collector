@@ -4,6 +4,7 @@ import click
 import requests
 import urllib3
 import json
+import os
 
 from nac_collector.cisco_client import CiscoClient
 
@@ -22,7 +23,9 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
     authentication for subsequent requests.
     """
 
-    LOOKUP_FILE = "nac_collector/resources/catalystcenter_lookups.json"
+    LOOKUP_FILE = os.path.join(
+        os.path.dirname(__file__), "resources/catalystcenter_lookups.json"
+    )
     DNAC_AUTH_ENDPOINT = "/dna/system/api/v1/auth/token"
     SOLUTION = "catalystcenter"
 
