@@ -106,7 +106,7 @@ If you installed with `poetry install` command:
 - with env variables
 
 ```sh
-poetry run nac-collector -s CATALYSTCENTER -v --git-provider
+poetry run nac-collector -s CATALYSTCENTER -v DEBUG --git-provider
 ```
 
 - without env variables

@@ -2,16 +2,16 @@
 
 ### Challenges Addressed
 
-Cisco Catalyst Center is a tool that helps manage networks. However, it doesn't always show the relationships between different parts of the network in a simple way. Imagine it like this: you know a parent exists, but it is not clear who the children are. This custom logic fixes that. It creates those connections so you can easily see how things are related.
+The Cisco Catalyst Center API does not always present the relationships between different API endpoints in a straightforward manner. For example, using child relationship in API endpoint URL: "/parent/%v/children" can be confusing. Imagine it this way: you know a parent exists, but it is unclear who the children are. This custom logic resolves that issue by creating those connections, allowing you to easily understand how things are related.
 
 
 ### How Does It Work?
 
-It uses "resource mappings" to link related information within Catalyst Center. Think of these mappings as instructions that tell the system how to find related pieces of information.
+It uses "resource mappings" to link related information within Catalyst Center. Think of these mappings as instructions that tell the tool how to find related pieces of information.
 
 ### Example of a Mapping:
 
-Let's say you want to find all the "layer2Handoffs" (think of these as specific network connections) within a "fabric" (a section of your network). Catalyst Center might not directly show you this. The mapping helps you find them.
+Let's say you want to find all the "layer2Handoffs" within a "fabricSite". Use the mapping below:
 
 ```json
 {
@@ -27,7 +27,7 @@ Let's say you want to find all the "layer2Handoffs" (think of these as specific 
 ### Explanation of the Mapping:
 - **"/dna/intent/api/v1/sda/fabricDevices/layer2Handoffs"**: This is the specific type of information we're looking for (the "layer2Handoffs").
 
-- **source_endpoint**: This is where we start looking for information. (/dna/intent/api/v1/sda/fabricSites?limit=500) Think of it as the address of a database that contains a list of network "fabrics."
+- **source_endpoint**: This is where we start looking for information. (/dna/intent/api/v1/sda/fabricSites?limit=500) We retrieve list of all `fabricSites`:
 
 From this endpoint, we get data like:
 ```json
@@ -49,34 +49,26 @@ From this endpoint, we get data like:
     "version": "string"
 }
 ```
-**source_key**: From that list, we need a specific piece of information to help us find the related "layer2Handoffs." In this case, it's the "id" of each fabric. So, from the example above, we grab these IDs: `["12c25131-f133-4e96-9fd9-e619424050f0", "2c69fff7-a569-476e-98f0-5afa5867c80d"]`
+**source_key**: From that list, we need a specific piece of information to help us find the related "layer2Handoffs" In this case, it's the "id" of each fabric. So, from the example above, we grab these IDs: `["12c25131-f133-4e96-9fd9-e619424050f0", "2c69fff7-a569-476e-98f0-5afa5867c80d"]`
 
-**target_endpoint**: Now that we have the "fabric" IDs, we use them to find the "layer2Handoffs" associated with each fabric. This is the address where we'll find that information (`/dna/intent/api/v1/sda/fabricDevices/layer2Handoffs?fabricId=%v`). 
+**target_endpoint**: Now that we have the "fabric IDs", we use them to find the "layer2Handoffs" associated with each fabric. This is the address where we'll find that information (`/dna/intent/api/v1/sda/fabricDevices/layer2Handoffs?fabricId=%v`).
 
 The `%v` is a placeholder where we put the fabricId. So, we would look at 
 
-`/dna/intent/api/v1/sda/fabricDevices/layer2Handoffs?fabricId=12c25131-f133-4e96-9fd9-e619424050f0` 
+`/dna/intent/api/v1/sda/fabricDevices/layer2Handoffs?fabricId=12c25131-f133-4e96-9fd9-e619424050f0`
 
 and 
 
-`/dna/intent/api/v1/sda/fabricDevices/layer2Handoffs?fabricId=2c69fff7-a569-476e-98f0-5afa5867c80d`.
+`/dna/intent/api/v1/sda/fabricDevices/layer2Handoffs?fabricId=2c69fff7-a569-476e-98f0-5afa5867c80d`
 
-**target_key**: This tells us what the "fabric" ID is called in the address of the "target endpoint." In this case, it's called "fabricId."
-
-
-
-### In Simple Terms:
-
-
-We have a list of network areas (fabrics) and we want to find all the connections (layer2Handoffs) in each area. This mapping tells the system how to use the fabric's ID to find the right connections.
-
+**target_key**: This tells us what the "fabric ID" is called in the address of the "target endpoint". In this case, it's called `fabricId`.
 
 
 ### Where is this used?
 
-The mappings are stored in a file called catalystcenter_lookups.json.
+The mappings are stored in a file called catalystcenter_lookups.json under `nac_collector/resources/` folder.
 
-In the code (cisco_client_catalystcenter.py), the system checks if it has a mapping for the type of information it's looking for. If it does, it uses the mapping to find the related information and connect it together.
+In the code [cisco_client_catalystcenter.py](./nac_collector/cisco_client_catalystcenter.py), the system checks if it has a mapping for the type of information it's looking for. If it does, it uses the mapping to find the related information and connect it together.
 
 ```python
 if endpoint.get("endpoint") in self.id_lookup:
