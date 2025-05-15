@@ -99,11 +99,15 @@ class GithubRepoWrapper:
                             if data.get("no_read") is not None and data.get("no_read"):
                                 continue
                             if "rest_endpoint" in data or "get_rest_endpoint" in data:
-                                endpoint = (
-                                    data.get("get_rest_endpoint")
-                                    if data.get("get_rest_endpoint") is not None
-                                    else data["rest_endpoint"]
-                                )
+                                # exception for SDWAN localized_policy
+                                if file.split(".yaml")[0] == "localized_policy":
+                                    endpoint = data["rest_endpoint"]
+                                else:
+                                    endpoint = (
+                                        data.get("get_rest_endpoint")
+                                        if data.get("get_rest_endpoint") is not None
+                                        else data["rest_endpoint"]
+                                    )
                                 self.logger.info(
                                     "Found rest_endpoint: %s in file: %s",
                                     endpoint,
