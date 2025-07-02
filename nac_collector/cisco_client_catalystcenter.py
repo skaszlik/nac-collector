@@ -148,13 +148,10 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
                             }
                         )
                 else:
-                    elem = (
-                        {"data": v, "endpoint": new_endpoint, "name": k}
-                    )
+                    elem = {"data": v, "endpoint": new_endpoint, "name": k}
                     if id_ is not None:
                         elem["id"] = id_
                     endpoint_dict[endpoint["name"]].append(elem)
-                    
 
         elif isinstance(data.get("response"), list):
             endpoint_dict[endpoint["name"]].append(
@@ -296,45 +293,55 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
                             children_endpoint_dict = self.process_endpoint_data(
                                 children_endpoint, children_endpoint_dict, data, id_
                             )
-                            
+
                             for index, value in enumerate(
                                 endpoint_dict[endpoint["name"]]
                             ):
                                 if isinstance(value.get("data"), list):
                                     for elem in value.get("data"):
-                                        attr = endpoint_dict[endpoint["name"]][
-                                            index
-                                        ].setdefault("children", {}).get(
-                                            children_endpoint["name"]
+                                        attr = (
+                                            endpoint_dict[endpoint["name"]][index]
+                                            .setdefault("children", {})
+                                            .get(children_endpoint["name"])
                                         )
                                         if attr is None:
-                                            childs = [children_endpoint_dict[
-                                                children_endpoint["name"]
-                                            ]]
+                                            childs = [
+                                                children_endpoint_dict[
+                                                    children_endpoint["name"]
+                                                ]
+                                            ]
                                             if len(childs) == 0:
                                                 continue
                                             if isinstance(childs, list):
                                                 for idx, ch in enumerate(childs):
-                                                    filtered_list = [item for item in ch if item.get("data") not in ("null",[], None, {})]
+                                                    filtered_list = [
+                                                        item
+                                                        for item in ch
+                                                        if item.get("data")
+                                                        not in ("null", [], None, {})
+                                                    ]
                                                     if len(filtered_list) == 0:
                                                         del childs[idx]
 
-                                            
                                             endpoint_dict[endpoint["name"]][
                                                 index
                                             ].setdefault("children", {})[
                                                 children_endpoint["name"]
-                                            ] = [children_endpoint_dict[
-                                                children_endpoint["name"]
-                                            ]]
+                                            ] = [
+                                                children_endpoint_dict[
+                                                    children_endpoint["name"]
+                                                ]
+                                            ]
                                         else:
                                             endpoint_dict[endpoint["name"]][
                                                 index
                                             ].setdefault("children", {})[
                                                 children_endpoint["name"]
-                                            ].append(children_endpoint_dict[
-                                                children_endpoint["name"]
-                                            ])
+                                            ].append(
+                                                children_endpoint_dict[
+                                                    children_endpoint["name"]
+                                                ]
+                                            )
                                         break
                                 else:
                                     if value.get("data").get("id") == id_:
