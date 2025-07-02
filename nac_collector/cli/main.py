@@ -16,7 +16,7 @@ from nac_collector.github_repo_wrapper import GithubRepoWrapper
 
 from . import options
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("main")
 
 error_handler = errorhandler.ErrorHandler()
 
@@ -79,6 +79,13 @@ def main(
 
     configure_logging(verbosity)
 
+    # Check for incompatible option combinations
+    if git_provider and solution == "NDO":
+        logger.error(
+            "--git-provider option is not supported with NDO solution. The NDO solution uses a different repository structure that is incompatible with the git provider functionality."
+        )
+        sys.exit(1)
+
     if git_provider:
         wrapper = GithubRepoWrapper(
             repo_url=f"https://github.com/CiscoDevNet/terraform-provider-{solution.lower()}.git",
@@ -114,7 +121,7 @@ def main(
 
         # Authenticate
         if not client.authenticate():
-            print("Authentication failed. Exiting...")
+            logger.error("Authentication failed. Exiting...")
             return
 
         final_dict = client.get_from_endpoints(endpoints_yaml_file)
@@ -125,7 +132,7 @@ def main(
 
     # Calculate the total execution time
     total_time = stop_time - start_time
-    print(f"Total execution time: {total_time:.2f} seconds")
+    logger.info(f"Total execution time: {total_time:.2f} seconds")
 
     exit()
 
