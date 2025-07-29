@@ -1,0 +1,11 @@
+# NDFC (Nexus Dashboard Fabric Controller) API Endpoints
+# This file contains sample endpoints for collecting configuration data from NDFC
+
+# Fabric configuration (Note: FABRIC_NAME will be replaced by fabric_name parameter)
+- name: Fabric_Configuration
+  endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/control/fabrics/FABRIC_NAME
+
+
+# NOTE: Some endpoints may require fabric-specific names
+# Replace FABRIC_NAME with your actual fabric name or implement
+# dynamic fabric name resolution in the client code

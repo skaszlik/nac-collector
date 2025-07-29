@@ -10,6 +10,7 @@ from nac_collector.cisco_client_fmc import CiscoClientFMC
 from nac_collector.cisco_client_ise import CiscoClientISE
 from nac_collector.cisco_client_catalystcenter import CiscoClientCATALYSTCENTER
 from nac_collector.cisco_client_ndo import CiscoClientNDO
+from nac_collector.cisco_client_ndfc import CiscoClientNDFC
 from nac_collector.cisco_client_sdwan import CiscoClientSDWAN
 from nac_collector.constants import GIT_TMP, MAX_RETRIES, RETRY_AFTER
 from nac_collector.github_repo_wrapper import GithubRepoWrapper
@@ -61,6 +62,8 @@ def configure_logging(level: str) -> None:
 @options.endpoints_file
 @options.timeout
 @options.output
+@options.domain
+@options.fabric_name
 def main(
     verbosity: str,
     solution: str,
@@ -71,6 +74,8 @@ def main(
     endpoints_file: str,
     timeout: int,
     output: str,
+    domain: str,
+    fabric_name: str,
 ) -> None:
     """A CLI tool to collect various network configurations."""
 
@@ -80,9 +85,9 @@ def main(
     configure_logging(verbosity)
 
     # Check for incompatible option combinations
-    if git_provider and solution == "NDO":
+    if git_provider and solution in ["NDO", "NDFC"]:
         logger.error(
-            "--git-provider option is not supported with NDO solution. The NDO solution uses a different repository structure that is incompatible with the git provider functionality."
+            "--git-provider option is not supported with %s solution. This solution uses a different repository structure that is incompatible with the git provider functionality.", solution
         )
         sys.exit(1)
 
@@ -107,17 +112,33 @@ def main(
         cisco_client = CiscoClientFMC
     elif solution == "CATALYSTCENTER":
         cisco_client = CiscoClientCATALYSTCENTER
+    elif solution == "NDFC":
+        cisco_client = CiscoClientNDFC
 
     if cisco_client:
-        client = cisco_client(
-            username=username,
-            password=password,
-            base_url=url,
-            max_retries=MAX_RETRIES,
-            retry_after=RETRY_AFTER,
-            timeout=timeout,
-            ssl_verify=False,
-        )
+        # Create client with appropriate parameters based on solution type
+        if solution == "NDFC":
+            client = cisco_client(
+                username=username,
+                password=password,
+                base_url=url,
+                max_retries=MAX_RETRIES,
+                retry_after=RETRY_AFTER,
+                timeout=timeout,
+                ssl_verify=False,
+                domain=domain,
+                fabric_name=fabric_name,
+            )
+        else:
+            client = cisco_client(
+                username=username,
+                password=password,
+                base_url=url,
+                max_retries=MAX_RETRIES,
+                retry_after=RETRY_AFTER,
+                timeout=timeout,
+                ssl_verify=False,
+            )
 
         # Authenticate
         if not client.authenticate():
