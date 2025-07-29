@@ -62,21 +62,29 @@ def configure_logging(level: str) -> None:
 @options.endpoints_file
 @options.timeout
 @options.output
+@options.output_dir
+@options.endpoints
+@options.no_ssl_verify
 @options.domain
 @options.fabric_name
+@options.generate_yaml
 def main(
-    verbosity: str,
-    solution: str,
-    username: str,
-    password: str,
-    url: str,
-    git_provider: bool,
-    endpoints_file: str,
-    timeout: int,
-    output: str,
-    domain: str,
-    fabric_name: str,
-) -> None:
+    verbosity,
+    solution,
+    username,
+    password,
+    url,
+    git_provider,
+    endpoints_file,
+    timeout,
+    output,
+    output_dir,
+    endpoints,
+    no_ssl_verify,
+    domain,
+    fabric_name,
+    generate_yaml,
+):
     """A CLI tool to collect various network configurations."""
 
     # Record the start time
@@ -147,6 +155,16 @@ def main(
 
         final_dict = client.get_from_endpoints(endpoints_yaml_file)
         client.write_to_json(final_dict, output_file)
+        
+        # Generate YAML files if requested (NDFC only)
+        if generate_yaml and solution == "NDFC":
+            logger.info("Generating YAML configuration files...")
+            try:
+                client.translate_fabric_to_yaml(output_file)
+                logger.info("YAML generation completed successfully")
+            except Exception as e:
+                logger.error(f"Error generating YAML files: {e}")
+                return
 
     # Record the stop time
     stop_time = time.time()

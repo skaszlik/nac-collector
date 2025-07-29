@@ -82,3 +82,30 @@ fabric_name = click.option(
     envvar="NAC_FABRIC_NAME",
     help="Fabric name for NDFC operations (NDFC only). Can also be set using the NAC_FABRIC_NAME environment variable",
 )
+
+generate_yaml = click.option(
+    "--generate-yaml",
+    "-y",
+    is_flag=True,
+    help="Generate YAML configuration files from JSON data using mapping templates (NDFC only)",
+)
+
+output_dir = click.option(
+    "--output-dir",
+    type=str,
+    default=".",
+    help="Output directory for generated files. Default is current directory",
+)
+
+endpoints = click.option(
+    "--endpoints",
+    type=str,
+    default=None,
+    help="Endpoints configuration",
+)
+
+no_ssl_verify = click.option(
+    "--no-ssl-verify",
+    is_flag=True,
+    help="Disable SSL certificate verification",
+)

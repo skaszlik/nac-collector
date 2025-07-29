@@ -1,12 +1,14 @@
 import logging
 import json
 import os
+from typing import List
 
 import click
 import requests
 import urllib3
 
 from nac_collector.cisco_client import CiscoClient
+from nac_collector.json_yaml_translator import NDFCJsonYamlTranslator
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 logger = logging.getLogger("main")
@@ -365,9 +367,10 @@ class CiscoClientNDFC(CiscoClient):
         final_dict = {}
 
         # Iterate over all endpoints
-        with click.progressbar(endpoints, label="Processing NDFC endpoints") as endpoint_bar:
+        with click.progressbar(endpoints, label="Processing NDFC tasks") as endpoint_bar:
             for endpoint in endpoint_bar:
-                logger.info("Processing NDFC endpoint: %s", endpoint["name"])
+                task_name = endpoint.get("name", "unknown")
+                logger.info("Processing NDFC %s task", task_name)
                 endpoint_dict = CiscoClient.create_endpoint_dict(endpoint)
                 
                 # Replace FABRIC_NAME placeholder with actual fabric name if provided
@@ -384,13 +387,11 @@ class CiscoClientNDFC(CiscoClient):
                     endpoint, endpoint_dict, data
                 )
                 
-                # TODO: Add support for children endpoints if needed for NDFC
-                # This can be implemented similar to the Catalyst Center implementation
                 
                 # Save results to dictionary
                 final_dict.update(endpoint_dict)
                 
-        logger.info("Completed processing %d NDFC endpoints", len(endpoints))
+        logger.info("Completed processing %d NDFC tasks", len(endpoints))
         return final_dict
 
     @staticmethod
@@ -414,3 +415,50 @@ class CiscoClientNDFC(CiscoClient):
                 return str(value)
         
         return None
+
+    def translate_fabric_to_yaml(self, json_file_path: str) -> None:
+        """
+        Translate the JSON fabric configuration to YAML files using mapping configuration.
+        
+        Args:
+            json_file_path: Path to the JSON file containing fabric configuration
+        """
+        import json
+        import os
+        
+        try:
+            # Load the collected JSON data
+            with open(json_file_path, 'r') as f:
+                json_data = json.load(f)
+            
+            # Extract the fabric configuration data
+            # The data is structured as {"Fabric_Configuration": [{"data": {...}}]}
+            fabric_config = None
+            if "Fabric_Configuration" in json_data and json_data["Fabric_Configuration"]:
+                fabric_config = json_data["Fabric_Configuration"][0].get("data", {})
+            
+            if not fabric_config:
+                logger.warning("No fabric configuration data found in JSON file")
+                return
+            
+            # Initialize the translator
+            mapping_config_path = "examples/ndfc_map_config.yaml"
+            if not os.path.exists(mapping_config_path):
+                logger.error(f"Mapping configuration file not found: {mapping_config_path}")
+                return
+                
+            translator = NDFCJsonYamlTranslator(mapping_config_path)
+            
+            # Translate the fabric configuration to YAML
+            yaml_files_created = translator.translate_json_data_to_yaml(fabric_config)
+            
+            if yaml_files_created:
+                logger.info(f"Created {len(yaml_files_created)} YAML files:")
+                for yaml_file in yaml_files_created:
+                    logger.info(f"  - {yaml_file}")
+            else:
+                logger.warning("No YAML files were created during translation")
+                
+        except Exception as e:
+            logger.error(f"Error during YAML translation: {e}")
+            raise

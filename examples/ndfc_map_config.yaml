@@ -1,0 +1,49 @@
+# ndfc_map_config.yaml
+
+# This section defines the different YAML files to be generated.
+output_files:
+  - # The 'name_template' allows for dynamic filenames using Jinja2-like syntax.
+    # The values inside {{ }} will be extracted from the input JSON.
+    name_template: "host_vars/{{ fabricName }}/global.nac.yaml"
+    description: "Global configuration for fabric"
+    mappings:
+      # Mapping for vxlan.fabric.name
+      - source_json_path: "$.fabricName"
+        target_yaml_path: "vxlan.fabric.name"
+
+      # Mapping for vxlan.fabric.type
+      - source_json_path: "$.fabricTechnologyFriendly"
+        target_yaml_path: "vxlan.fabric.type"
+        transformations:
+          # Replace spaces with underscores
+          - type: "replace_string"
+            from: " "
+            to: "_"
+
+      # Mapping for vxlan.global.bgp_asn
+      # The input JSON has "asn": "*****", but the desired output is "65001".
+      # This transformation maps a specific input value to a desired output value.
+      - source_json_path: "$.asn"
+        target_yaml_path: "vxlan.global.bgp_asn"
+        transformations:
+          - type: "map_value"
+            mapping:
+              "*****": "65001" # If the input 'asn' is "*****", set output to "65001"
+            default: "{{ value }}" # Otherwise, use the original value (or specify another default)
+
+      # Mapping for vxlan.global.route_reflectors
+      - source_json_path: "$.nvPairs.RR_COUNT"
+        target_yaml_path: "vxlan.global.route_reflectors"
+        transformations:
+          - type: "to_integer"
+          
+  # Mapping for vxlan.underlay    
+  - name_template: "host_vars/{{ fabricName }}/underlay.nac.yaml"
+    description: "Underlay configuration for fabric"
+    mappings:
+      # Mapping for vxlan.underlay.general.replication_mode
+      - source_json_path: "$.replicationMode"
+        target_yaml_path: "vxlan.underlay.general.replication_mode"
+        transformations:
+          # Convert the string to lowercase
+          - type: "to_lowercase"
