@@ -129,6 +129,47 @@ class NDFCJsonYamlTranslator:
                     else:
                         value = default
                         
+            elif trans_type == 'to_integer':
+                try:
+                    value = int(value)
+                except (ValueError, TypeError):
+                    logger.warning("Could not convert value to integer: %s", value)
+                    
+            elif trans_type == 'to_boolean':
+                if isinstance(value, str):
+                    # Convert string representations to boolean
+                    lower_value = value.lower().strip().strip("'").strip('"')
+                    if lower_value in ('true', '1', 'yes', 'on', 'enabled'):
+                        value = True
+                    elif lower_value in ('false', '0', 'no', 'off', 'disabled'):
+                        value = False
+                    else:
+                        logger.warning("Could not convert string value '%s' to boolean", value)
+                elif isinstance(value, (int, float)):
+                    # Convert numeric values to boolean
+                    value = bool(value)
+                elif isinstance(value, bool):
+                    # Already a boolean, keep as is
+                    pass
+                else:
+                    logger.warning("Could not convert value of type %s to boolean: %s", type(value).__name__, value)
+                    
+            elif trans_type == 'split_range':
+                if isinstance(value, str) and '-' in value:
+                    try:
+                        # Split the range string (e.g., "20010-29999" -> {"from": 20010, "to": 29999})
+                        parts = value.split('-', 1)  # Split only on first dash
+                        if len(parts) == 2:
+                            from_val = int(parts[0].strip())
+                            to_val = int(parts[1].strip())
+                            value = {"from": from_val, "to": to_val}
+                        else:
+                            logger.warning("Invalid range format: %s", value)
+                    except (ValueError, TypeError) as e:
+                        logger.warning("Could not parse range value '%s': %s", value, e)
+                else:
+                    logger.warning("Range splitting requires string value with '-' separator, got: %s", value)
+                    
             elif trans_type == 'set_value':
                 # This type is handled differently - it sets a static value
                 # and doesn't use the input value at all

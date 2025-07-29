@@ -1,0 +1,32 @@
+vxlan:
+  fabric:
+    name: KRK-SITE1
+    type: VXLAN_EVPN
+  global:
+    bgp_asn: '65001'
+    route_reflectors: 2
+    anycast_gateway_mac: feed.dead.beef
+    layer2_vni_range:
+      from: 20010
+      to: 29999
+    layer3_vni_range:
+      from: 32000
+      to: 39999
+    layer2_vlan_range:
+      from: 10
+      to: 1999
+    layer3_vlan_range:
+      from: 2000
+      to: 2999
+    vpc:
+      peer_link_vlan: 3600
+      peer_keep_alive: management
+      auto_recovery_time: 360
+      delay_restore_time: 60
+      peer_link_port_channel_id: 500
+      ipv6_nd_sync: true
+      advertise_pip: true
+      advertise_pip_border_only: false
+      domain_id_range: 10-1000
+      fabric_vpc_qos: false
+      fabric_vpc_qos_policy_name: spine_qos_for_fabric_vpc_peering
