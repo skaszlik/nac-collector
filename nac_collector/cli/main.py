@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 import time
 
@@ -22,6 +23,35 @@ logger = logging.getLogger("main")
 error_handler = errorhandler.ErrorHandler()
 
 
+class ColoredFormatter(logging.Formatter):
+    """Custom formatter to add colors to different log levels"""
+    
+    # ANSI color codes
+    COLORS = {
+        'DEBUG': '\033[36m',      # Cyan
+        'INFO': '\033[32m',       # Green
+        'WARNING': '\033[33m',    # Orange/Yellow
+        'ERROR': '\033[31m',      # Red
+        'CRITICAL': '\033[35m',   # Magenta
+        'RESET': '\033[0m'        # Reset to default
+    }
+    
+    def format(self, record):
+        # Get the original formatted message
+        original_format = super().format(record)
+        
+        # Add color to the levelname in the message
+        levelname = record.levelname
+        if levelname in self.COLORS:
+            # Replace the levelname with colored version
+            colored_levelname = f"{self.COLORS[levelname]}{levelname}{self.COLORS['RESET']}"
+            # Replace levelname in the formatted message
+            colored_format = original_format.replace(levelname, colored_levelname, 1)
+            return colored_format
+        
+        return original_format
+
+
 def configure_logging(level: str) -> None:
     if level == "DEBUG":
         lev = logging.DEBUG
@@ -35,9 +65,15 @@ def configure_logging(level: str) -> None:
         lev = logging.CRITICAL
     logger = logging.getLogger()
     handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(
-        logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    )
+    
+    # Use ColoredFormatter for colored output, but only if output is a terminal
+    if sys.stdout.isatty():
+        formatter = ColoredFormatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    else:
+        # Use plain formatter for non-terminal output (e.g., piped to file)
+        formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    
+    handler.setFormatter(formatter)
     logger.addHandler(handler)
     logger.setLevel(lev)
     error_handler.reset()
@@ -154,13 +190,20 @@ def main(
             return
 
         final_dict = client.get_from_endpoints(endpoints_yaml_file)
-        client.write_to_json(final_dict, output_file)
+        
+        # For NDFC, don't create a separate JSON file if the data is empty
+        # (NDFC saves data directly to fabric settings file)
+        if solution == "NDFC" and not final_dict:
+            logger.info("NDFC data saved to fabric-specific file. Skipping general output file creation.")
+        else:
+            client.write_to_json(final_dict, output_file)
         
         # Generate YAML files if requested (NDFC only)
         if generate_yaml and solution == "NDFC":
             logger.info("Generating YAML configuration files...")
             try:
-                client.translate_fabric_to_yaml(output_file)
+                # For NDFC, the client will automatically use the fabric settings file
+                client.translate_fabric_to_yaml()
                 logger.info("YAML generation completed successfully")
             except Exception as e:
                 logger.error(f"Error generating YAML files: {e}")

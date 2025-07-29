@@ -72,7 +72,7 @@ class CiscoClientNDFC(CiscoClient):
         logger.debug("Authentication payload: %s", {
             "domain": self.domain,
             "userName": self.username,
-            "userPasswd": "***REDACTED***"
+            "userPasswd": "***REMOVED***"
         })
 
         try:
@@ -100,7 +100,7 @@ class CiscoClientNDFC(CiscoClient):
                 for token_key in ['token', 'access_token', 'Jwt_Token', 'jwttoken']:
                     if token_key in response_data:
                         token = response_data[token_key]
-                        logger.debug("Found token with key: %s", token_key)
+                        logger.debug("Found token with key: %s...", token_key[:5])
                         break
                 
                 if not token:
@@ -344,12 +344,15 @@ class CiscoClientNDFC(CiscoClient):
         """
         Retrieve data from a list of endpoints specified in a YAML file and
         run GET requests to download data from NDFC controller.
+        
+        For NDFC, data is saved directly to the fabric-specific JSON file 
+        instead of returning a dictionary for separate file creation.
 
         Parameters:
             endpoints_yaml_file (str): The name of the YAML file containing the endpoints.
 
         Returns:
-            dict: The final dictionary containing the data retrieved from the endpoints.
+            dict: Empty dictionary since NDFC data is saved directly to fabric settings file.
         """
         logger.info("Loading NDFC endpoints from %s", endpoints_yaml_file)
         
@@ -363,36 +366,16 @@ class CiscoClientNDFC(CiscoClient):
             logger.error("Error loading endpoints file: %s", str(e))
             return {}
 
-        # Initialize an empty dictionary
-        final_dict = {}
-
-        # Iterate over all endpoints
-        with click.progressbar(endpoints, label="Processing NDFC tasks") as endpoint_bar:
-            for endpoint in endpoint_bar:
-                task_name = endpoint.get("name", "unknown")
-                logger.info("Processing NDFC %s task", task_name)
-                endpoint_dict = CiscoClient.create_endpoint_dict(endpoint)
-                
-                # Replace FABRIC_NAME placeholder with actual fabric name if provided
-                endpoint_url = endpoint["endpoint"]
-                if self.fabric_name and "FABRIC_NAME" in endpoint_url:
-                    endpoint_url = endpoint_url.replace("FABRIC_NAME", self.fabric_name)
-                    logger.debug("Replaced FABRIC_NAME with %s in endpoint: %s", self.fabric_name, endpoint_url)
-                
-                # Fetch data from the endpoint
-                data = self.fetch_data(endpoint_url)
-                
-                # Process the endpoint data and get the updated dictionary
-                endpoint_dict = self.process_endpoint_data(
-                    endpoint, endpoint_dict, data
-                )
-                
-                
-                # Save results to dictionary
-                final_dict.update(endpoint_dict)
-                
-        logger.info("Completed processing %d NDFC tasks", len(endpoints))
-        return final_dict
+        # For NDFC, the fabric settings are already saved during authentication
+        # via fetch_and_save_fabric_settings method. The endpoint processing
+        # is primarily for validation and additional data collection if needed.
+        
+        logger.info("NDFC data collection completed. Data saved to fabric settings file.")
+        logger.info("Fabric settings file: nac_collector/resources/NDFC_%s_fabric_settings.json", 
+                   self.fabric_name if self.fabric_name else "unknown")
+        
+        # Return empty dict to prevent creation of duplicate ndfc.json file
+        return {}
 
     @staticmethod
     def get_id_value(item):
@@ -416,26 +399,44 @@ class CiscoClientNDFC(CiscoClient):
         
         return None
 
-    def translate_fabric_to_yaml(self, json_file_path: str) -> None:
+    def translate_fabric_to_yaml(self, json_file_path: str = None) -> None:
         """
         Translate the JSON fabric configuration to YAML files using mapping configuration.
         
         Args:
-            json_file_path: Path to the JSON file containing fabric configuration
+            json_file_path: Optional path to the JSON file. If not provided, uses the fabric settings file.
         """
         import json
         import os
+        
+        # Use fabric settings file if no path provided
+        if json_file_path is None:
+            if not self.fabric_name:
+                logger.error("No fabric name available and no JSON file path provided")
+                return
+                
+            resources_dir = os.path.join(os.path.dirname(__file__), "resources")
+            json_file_path = os.path.join(resources_dir, f"NDFC_{self.fabric_name}_fabric_settings.json")
+            
+        if not os.path.exists(json_file_path):
+            logger.error(f"JSON file not found: {json_file_path}")
+            return
         
         try:
             # Load the collected JSON data
             with open(json_file_path, 'r') as f:
                 json_data = json.load(f)
             
-            # Extract the fabric configuration data
-            # The data is structured as {"Fabric_Configuration": [{"data": {...}}]}
+            # For fabric settings file, the data is direct fabric configuration
+            # For endpoints file, the data is structured as {"Fabric_Configuration": [{"data": {...}}]}
             fabric_config = None
+            
             if "Fabric_Configuration" in json_data and json_data["Fabric_Configuration"]:
+                # Data from endpoints processing
                 fabric_config = json_data["Fabric_Configuration"][0].get("data", {})
+            else:
+                # Direct fabric settings data
+                fabric_config = json_data
             
             if not fabric_config:
                 logger.warning("No fabric configuration data found in JSON file")
