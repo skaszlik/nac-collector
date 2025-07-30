@@ -8,7 +8,6 @@ import requests
 import urllib3
 
 from nac_collector.cisco_client import CiscoClient
-from nac_collector.json_yaml_translator import NDFCJsonYamlTranslator
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 logger = logging.getLogger("main")
@@ -139,10 +138,6 @@ class CiscoClientNDFC(CiscoClient):
                 logger.debug("Session headers configured: %s", dict(self.session.headers))
                 logger.info("NDFC authentication completed successfully")
                 
-                # If fabric_name is provided, fetch and save fabric settings
-                if self.fabric_name:
-                    self.fetch_and_save_fabric_settings()
-                
                 return True
 
             else:
@@ -214,7 +209,7 @@ class CiscoClientNDFC(CiscoClient):
                     
                     # Save fabric settings to JSON file
                     filename = f"NDFC_{self.fabric_name}_fabric_settings.json"
-                    filepath = os.path.join(resources_dir, filename)
+                    filepath = os.path.join(filename)
                     
                     with open(filepath, 'w', encoding='utf-8') as f:
                         json.dump(fabric_data, f, indent=4, ensure_ascii=False)
@@ -308,6 +303,7 @@ class CiscoClientNDFC(CiscoClient):
         Returns:
             dict: The updated endpoint dictionary with processed data.
         """
+
         if data is None:
             endpoint_dict[endpoint["name"]].append(
                 {"data": {}, "endpoint": endpoint["endpoint"]}
@@ -344,15 +340,12 @@ class CiscoClientNDFC(CiscoClient):
         """
         Retrieve data from a list of endpoints specified in a YAML file and
         run GET requests to download data from NDFC controller.
-        
-        For NDFC, data is saved directly to the fabric-specific JSON file 
-        instead of returning a dictionary for separate file creation.
 
         Parameters:
             endpoints_yaml_file (str): The name of the YAML file containing the endpoints.
 
         Returns:
-            dict: Empty dictionary since NDFC data is saved directly to fabric settings file.
+            dict: Dictionary containing the collected data from all endpoints.
         """
         logger.info("Loading NDFC endpoints from %s", endpoints_yaml_file)
         
@@ -366,16 +359,90 @@ class CiscoClientNDFC(CiscoClient):
             logger.error("Error loading endpoints file: %s", str(e))
             return {}
 
-        # For NDFC, the fabric settings are already saved during authentication
-        # via fetch_and_save_fabric_settings method. The endpoint processing
-        # is primarily for validation and additional data collection if needed.
+        if not endpoints:
+            logger.warning("No endpoints found in %s", endpoints_yaml_file)
+            return {}
+
+        # Initialize the result dictionary
+        endpoint_dict = {}
         
-        logger.info("NDFC data collection completed. Data saved to fabric settings file.")
-        logger.info("Fabric settings file: nac_collector/resources/NDFC_%s_fabric_settings.json", 
-                   self.fabric_name if self.fabric_name else "unknown")
+        logger.info("Processing %d endpoints", len(endpoints))
         
-        # Return empty dict to prevent creation of duplicate ndfc.json file
-        return {}
+        for endpoint in endpoints:
+            if not isinstance(endpoint, dict) or 'name' not in endpoint or 'endpoint' not in endpoint:
+                logger.warning("Skipping invalid endpoint configuration: %s", endpoint)
+                continue
+                
+            endpoint_name = endpoint['name']
+            endpoint_url = endpoint['endpoint']
+            
+            # Replace FABRIC_NAME placeholder with actual fabric name if provided
+            if self.fabric_name and 'FABRIC_NAME' in endpoint_url:
+                endpoint_url = endpoint_url.replace('FABRIC_NAME', self.fabric_name)
+                logger.debug("Replaced FABRIC_NAME in URL: %s", endpoint_url)
+            
+            # Initialize list for this endpoint if not exists
+            if endpoint_name not in endpoint_dict:
+                endpoint_dict[endpoint_name] = []
+            
+            logger.info("Fetching data from endpoint: %s", endpoint_name)
+            logger.debug("Endpoint URL: %s", endpoint_url)
+            
+            try:
+                # Make the API request
+                response = self.session.get(
+                    f"{self.base_url}{endpoint_url}",
+                    timeout=self.timeout,
+                    verify=self.ssl_verify
+                )
+                
+                logger.debug("Response status code: %s", response.status_code)
+                
+                if response.status_code == 200:
+                    try:
+                        data = response.json()
+                        logger.info("Successfully retrieved data from %s", endpoint_name)
+                        logger.debug("Response data keys: %s", 
+                                   list(data.keys()) if isinstance(data, dict) else f"List with {len(data)} items" if isinstance(data, list) else "Non-dict/list response")
+                        
+                        # Process the data using the existing process_endpoint_data method
+                        endpoint_dict = self.process_endpoint_data(endpoint, endpoint_dict, data)
+                        
+                    except json.JSONDecodeError as e:
+                        logger.error("Failed to decode JSON response from %s: %s", endpoint_name, str(e))
+                        logger.debug("Raw response content: %s", response.text[:500])
+                        # Add empty data entry for failed parsing
+                        endpoint_dict[endpoint_name].append(
+                            {"data": {}, "endpoint": endpoint_url, "error": "JSON decode error"}
+                        )
+                        
+                else:
+                    logger.error("Failed to fetch data from %s. Status code: %s", endpoint_name, response.status_code)
+                    logger.debug("Error response: %s", response.text[:500] if response.text else "No response text")
+                    # Add empty data entry for failed request
+                    endpoint_dict[endpoint_name].append(
+                        {"data": {}, "endpoint": endpoint_url, "error": f"HTTP {response.status_code}"}
+                    )
+                    
+            except requests.exceptions.Timeout:
+                logger.error("Request to %s timed out after %s seconds", endpoint_name, self.timeout)
+                endpoint_dict[endpoint_name].append(
+                    {"data": {}, "endpoint": endpoint_url, "error": "Timeout"}
+                )
+            except requests.exceptions.ConnectionError as e:
+                logger.error("Connection error for %s: %s", endpoint_name, str(e))
+                endpoint_dict[endpoint_name].append(
+                    {"data": {}, "endpoint": endpoint_url, "error": "Connection error"}
+                )
+            except Exception as e:
+                logger.error("Unexpected error fetching data from %s: %s", endpoint_name, str(e))
+                endpoint_dict[endpoint_name].append(
+                    {"data": {}, "endpoint": endpoint_url, "error": str(e)}
+                )
+        
+        logger.info("NDFC data collection completed from %d endpoints", len(endpoints))
+        
+        return endpoint_dict
 
     @staticmethod
     def get_id_value(item):
@@ -398,68 +465,3 @@ class CiscoClientNDFC(CiscoClient):
                 return str(value)
         
         return None
-
-    def translate_fabric_to_yaml(self, json_file_path: str = None) -> None:
-        """
-        Translate the JSON fabric configuration to YAML files using mapping configuration.
-        
-        Args:
-            json_file_path: Optional path to the JSON file. If not provided, uses the fabric settings file.
-        """
-        import json
-        import os
-        
-        # Use fabric settings file if no path provided
-        if json_file_path is None:
-            if not self.fabric_name:
-                logger.error("No fabric name available and no JSON file path provided")
-                return
-                
-            resources_dir = os.path.join(os.path.dirname(__file__), "resources")
-            json_file_path = os.path.join(resources_dir, f"NDFC_{self.fabric_name}_fabric_settings.json")
-            
-        if not os.path.exists(json_file_path):
-            logger.error(f"JSON file not found: {json_file_path}")
-            return
-        
-        try:
-            # Load the collected JSON data
-            with open(json_file_path, 'r') as f:
-                json_data = json.load(f)
-            
-            # For fabric settings file, the data is direct fabric configuration
-            # For endpoints file, the data is structured as {"Fabric_Configuration": [{"data": {...}}]}
-            fabric_config = None
-            
-            if "Fabric_Configuration" in json_data and json_data["Fabric_Configuration"]:
-                # Data from endpoints processing
-                fabric_config = json_data["Fabric_Configuration"][0].get("data", {})
-            else:
-                # Direct fabric settings data
-                fabric_config = json_data
-            
-            if not fabric_config:
-                logger.warning("No fabric configuration data found in JSON file")
-                return
-            
-            # Initialize the translator
-            mapping_config_path = "examples/ndfc_map_config.yaml"
-            if not os.path.exists(mapping_config_path):
-                logger.error(f"Mapping configuration file not found: {mapping_config_path}")
-                return
-                
-            translator = NDFCJsonYamlTranslator(mapping_config_path)
-            
-            # Translate the fabric configuration to YAML
-            yaml_files_created = translator.translate_json_data_to_yaml(fabric_config)
-            
-            if yaml_files_created:
-                logger.info(f"Created {len(yaml_files_created)} YAML files:")
-                for yaml_file in yaml_files_created:
-                    logger.info(f"  - {yaml_file}")
-            else:
-                logger.warning("No YAML files were created during translation")
-                
-        except Exception as e:
-            logger.error(f"Error during YAML translation: {e}")
-            raise

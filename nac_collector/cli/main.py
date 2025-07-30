@@ -103,7 +103,6 @@ def configure_logging(level: str) -> None:
 @options.no_ssl_verify
 @options.domain
 @options.fabric_name
-@options.generate_yaml
 def main(
     verbosity,
     solution,
@@ -119,7 +118,6 @@ def main(
     no_ssl_verify,
     domain,
     fabric_name,
-    generate_yaml,
 ):
     """A CLI tool to collect various network configurations."""
 
@@ -190,24 +188,7 @@ def main(
             return
 
         final_dict = client.get_from_endpoints(endpoints_yaml_file)
-        
-        # For NDFC, don't create a separate JSON file if the data is empty
-        # (NDFC saves data directly to fabric settings file)
-        if solution == "NDFC" and not final_dict:
-            logger.info("NDFC data saved to fabric-specific file. Skipping general output file creation.")
-        else:
-            client.write_to_json(final_dict, output_file)
-        
-        # Generate YAML files if requested (NDFC only)
-        if generate_yaml and solution == "NDFC":
-            logger.info("Generating YAML configuration files...")
-            try:
-                # For NDFC, the client will automatically use the fabric settings file
-                client.translate_fabric_to_yaml()
-                logger.info("YAML generation completed successfully")
-            except Exception as e:
-                logger.error(f"Error generating YAML files: {e}")
-                return
+        client.write_to_json(final_dict, output_file)
 
     # Record the stop time
     stop_time = time.time()

@@ -1,6 +1,0 @@
-vxlan:
-  underlay:
-    general:
-      routing_protocol: ospf
-      enable_ipv6_underlay: false
-      replication_mode: multicast

@@ -83,13 +83,6 @@ fabric_name = click.option(
     help="Fabric name for NDFC operations (NDFC only). Can also be set using the NAC_FABRIC_NAME environment variable",
 )
 
-generate_yaml = click.option(
-    "--generate-yaml",
-    "-y",
-    is_flag=True,
-    help="Generate YAML configuration files from JSON data using mapping templates (NDFC only)",
-)
-
 output_dir = click.option(
     "--output-dir",
     type=str,
