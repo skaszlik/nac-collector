@@ -23,30 +23,32 @@ error_handler = errorhandler.ErrorHandler()
 
 class ColoredFormatter(logging.Formatter):
     """Custom formatter to add colors to different log levels"""
-    
+
     # ANSI color codes
     COLORS = {
-        'DEBUG': '\033[36m',      # Cyan
-        'INFO': '\033[32m',       # Green
-        'WARNING': '\033[33m',    # Orange/Yellow
-        'ERROR': '\033[31m',      # Red
-        'CRITICAL': '\033[35m',   # Magenta
-        'RESET': '\033[0m'        # Reset to default
+        "DEBUG": "\033[36m",  # Cyan
+        "INFO": "\033[32m",  # Green
+        "WARNING": "\033[33m",  # Orange/Yellow
+        "ERROR": "\033[31m",  # Red
+        "CRITICAL": "\033[35m",  # Magenta
+        "RESET": "\033[0m",  # Reset to default
     }
-    
+
     def format(self, record):
         # Get the original formatted message
         original_format = super().format(record)
-        
+
         # Add color to the levelname in the message
         levelname = record.levelname
         if levelname in self.COLORS:
             # Replace the levelname with colored version
-            colored_levelname = f"{self.COLORS[levelname]}{levelname}{self.COLORS['RESET']}"
+            colored_levelname = (
+                f"{self.COLORS[levelname]}{levelname}{self.COLORS['RESET']}"
+            )
             # Replace levelname in the formatted message
             colored_format = original_format.replace(levelname, colored_levelname, 1)
             return colored_format
-        
+
         return original_format
 
 
@@ -63,14 +65,18 @@ def configure_logging(level: str) -> None:
         lev = logging.CRITICAL
     logger = logging.getLogger()
     handler = logging.StreamHandler(sys.stdout)
-    
+
     # Use ColoredFormatter for colored output, but only if output is a terminal
     if sys.stdout.isatty():
-        formatter = ColoredFormatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        formatter = ColoredFormatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
     else:
         # Use plain formatter for non-terminal output (e.g., piped to file)
-        formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
+
     handler.setFormatter(formatter)
     logger.addHandler(handler)
     logger.setLevel(lev)
@@ -127,7 +133,8 @@ def main(
     # Check for incompatible option combinations
     if git_provider and solution in ["NDO", "NDFC"]:
         logger.error(
-            "--git-provider option is not supported with %s solution. This solution uses a different repository structure that is incompatible with the git provider functionality.", solution
+            "--git-provider option is not supported with %s solution. This solution uses a different repository structure that is incompatible with the git provider functionality.",
+            solution,
         )
         sys.exit(1)
 

@@ -51,12 +51,12 @@ class CiscoClientNDFC(CiscoClient):
             bool: True if authentication is successful, False otherwise.
         """
         auth_url = f"{self.base_url}{self.NDFC_AUTH_ENDPOINT}"
-        
+
         # Prepare authentication payload
         auth_payload = {
             "domain": self.domain,
             "userName": self.username,
-            "userPasswd": self.password
+            "userPasswd": self.password,
         }
 
         headers = {
@@ -65,11 +65,14 @@ class CiscoClientNDFC(CiscoClient):
         }
 
         logger.debug("Attempting authentication to NDFC at: %s", auth_url)
-        logger.debug("Authentication payload: %s", {
-            "domain": self.domain,
-            "userName": self.username,
-            "userPasswd": "***REMOVED***"
-        })
+        logger.debug(
+            "Authentication payload: %s",
+            {
+                "domain": self.domain,
+                "userName": self.username,
+                "userPasswd": "***REMOVED***",
+            },
+        )
 
         try:
             response = requests.post(
@@ -80,40 +83,44 @@ class CiscoClientNDFC(CiscoClient):
                 timeout=self.timeout,
             )
 
-            logger.debug("Authentication response status code: %s", response.status_code)
+            logger.debug(
+                "Authentication response status code: %s", response.status_code
+            )
             logger.debug("Authentication response headers: %s", dict(response.headers))
 
             if response and response.status_code == 200:
                 logger.info("Authentication successful for NDFC URL: %s", auth_url)
-                
+
                 # Parse response to get token
                 response_data = response.json()
                 logger.debug("Authentication response data: %s", response_data)
-                
+
                 # NDFC typically returns the token in the response
                 # The exact key may vary, common patterns are 'token', 'access_token', or 'Jwt_Token'
                 token = None
-                for token_key in ['token', 'access_token', 'Jwt_Token', 'jwttoken']:
+                for token_key in ["token", "access_token", "Jwt_Token", "jwttoken"]:
                     if token_key in response_data:
                         token = response_data[token_key]
                         logger.debug("Found token with key: %s...", token_key[:5])
                         break
-                
+
                 if not token:
                     logger.error("No valid token found in authentication response")
-                    logger.debug("Available keys in response: %s", list(response_data.keys()))
+                    logger.debug(
+                        "Available keys in response: %s", list(response_data.keys())
+                    )
                     return False
 
                 # Extract AuthCookie from response headers for future API calls
                 auth_cookie = None
-                set_cookie_header = response.headers.get('Set-Cookie')
+                set_cookie_header = response.headers.get("Set-Cookie")
                 if set_cookie_header:
                     # Parse AuthCookie from Set-Cookie header
-                    for cookie in set_cookie_header.split(','):
-                        if 'AuthCookie=' in cookie:
-                            auth_cookie = cookie.split('AuthCookie=')[1].split(';')[0]
+                    for cookie in set_cookie_header.split(","):
+                        if "AuthCookie=" in cookie:
+                            auth_cookie = cookie.split("AuthCookie=")[1].split(";")[0]
                             break
-                    
+
                 if auth_cookie:
                     self.auth_cookie = auth_cookie
                     logger.debug("Extracted AuthCookie for future API calls")
@@ -122,19 +129,23 @@ class CiscoClientNDFC(CiscoClient):
 
                 # Create a session after successful authentication
                 self.session = requests.Session()
-                self.session.headers.update({
-                    "Content-Type": "application/json",
-                    "Accept": "application/json",
-                    "Authorization": f"Bearer {token}",
-                })
-                
+                self.session.headers.update(
+                    {
+                        "Content-Type": "application/json",
+                        "Accept": "application/json",
+                        "Authorization": f"Bearer {token}",
+                    }
+                )
+
                 # Add AuthCookie to session if available
                 if self.auth_cookie:
-                    self.session.cookies.set('AuthCookie', self.auth_cookie)
-                
-                logger.debug("Session headers configured: %s", dict(self.session.headers))
+                    self.session.cookies.set("AuthCookie", self.auth_cookie)
+
+                logger.debug(
+                    "Session headers configured: %s", dict(self.session.headers)
+                )
                 logger.info("NDFC authentication completed successfully")
-                
+
                 return True
 
             else:
@@ -147,13 +158,17 @@ class CiscoClientNDFC(CiscoClient):
                 return False
 
         except requests.exceptions.Timeout:
-            logger.error("Authentication request timed out after %s seconds", self.timeout)
+            logger.error(
+                "Authentication request timed out after %s seconds", self.timeout
+            )
             return False
         except requests.exceptions.ConnectionError as e:
             logger.error("Connection error during authentication: %s", str(e))
             return False
         except json.JSONDecodeError as e:
-            logger.error("Failed to decode JSON response during authentication: %s", str(e))
+            logger.error(
+                "Failed to decode JSON response during authentication: %s", str(e)
+            )
             return False
         except Exception as e:
             logger.error("Unexpected error during authentication: %s", str(e))
@@ -163,124 +178,162 @@ class CiscoClientNDFC(CiscoClient):
         """
         Fetch fabric settings for the specified fabric and save to JSON file.
         Uses AuthCookie for authentication.
-        
+
         Returns:
             bool: True if successful, False otherwise.
         """
         if not self.fabric_name:
             logger.error("No fabric name provided for fabric settings retrieval")
             return False
-            
+
         if not self.session:
             logger.error("No authenticated session available")
             return False
-            
+
         # Construct the fabric settings API endpoint
         fabric_endpoint = f"/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/control/fabrics/{self.fabric_name}"
         fabric_url = f"{self.base_url}{fabric_endpoint}"
-        
+
         logger.info("Fetching fabric settings for fabric: %s", self.fabric_name)
         logger.debug("Fabric settings URL: %s", fabric_url)
-        
+
         try:
             # Make the API call using the authenticated session with AuthCookie
             response = self.session.get(
-                fabric_url,
-                verify=self.ssl_verify,
-                timeout=self.timeout
+                fabric_url, verify=self.ssl_verify, timeout=self.timeout
             )
-            
-            logger.debug("Fabric settings response status code: %s", response.status_code)
-            
+
+            logger.debug(
+                "Fabric settings response status code: %s", response.status_code
+            )
+
             if response.status_code == 200:
                 try:
                     fabric_data = response.json()
-                    logger.info("Successfully retrieved fabric settings for: %s", self.fabric_name)
-                    logger.debug("Fabric settings data keys: %s", list(fabric_data.keys()) if isinstance(fabric_data, dict) else "Non-dict response")
-                    
+                    logger.info(
+                        "Successfully retrieved fabric settings for: %s",
+                        self.fabric_name,
+                    )
+                    logger.debug(
+                        "Fabric settings data keys: %s",
+                        list(fabric_data.keys())
+                        if isinstance(fabric_data, dict)
+                        else "Non-dict response",
+                    )
+
                     # Create resources directory if it doesn't exist
                     resources_dir = os.path.join(os.path.dirname(__file__), "resources")
                     if not os.path.exists(resources_dir):
                         os.makedirs(resources_dir)
                         logger.debug("Created resources directory: %s", resources_dir)
-                    
+
                     # Save fabric settings to JSON file
                     filename = f"NDFC_{self.fabric_name}_fabric_settings.json"
                     filepath = os.path.join(filename)
-                    
-                    with open(filepath, 'w', encoding='utf-8') as f:
+
+                    with open(filepath, "w", encoding="utf-8") as f:
                         json.dump(fabric_data, f, indent=4, ensure_ascii=False)
-                    
+
                     logger.info("Fabric settings saved to: %s", filepath)
                     return True
-                    
+
                 except json.JSONDecodeError as e:
-                    logger.error("Failed to decode JSON response for fabric settings: %s", str(e))
+                    logger.error(
+                        "Failed to decode JSON response for fabric settings: %s", str(e)
+                    )
                     logger.debug("Raw response content: %s", response.text[:500])
                     return False
-                    
+
             else:
-                logger.error("Failed to fetch fabric settings. Status code: %s", response.status_code)
-                logger.debug("Error response: %s", response.text[:500] if response.text else "No response text")
+                logger.error(
+                    "Failed to fetch fabric settings. Status code: %s",
+                    response.status_code,
+                )
+                logger.debug(
+                    "Error response: %s",
+                    response.text[:500] if response.text else "No response text",
+                )
                 return False
-                
+
         except requests.exceptions.Timeout:
-            logger.error("Fabric settings request timed out after %s seconds", self.timeout)
+            logger.error(
+                "Fabric settings request timed out after %s seconds", self.timeout
+            )
             return False
         except requests.exceptions.ConnectionError as e:
-            logger.error("Connection error during fabric settings retrieval: %s", str(e))
+            logger.error(
+                "Connection error during fabric settings retrieval: %s", str(e)
+            )
             return False
         except Exception as e:
-            logger.error("Unexpected error during fabric settings retrieval: %s", str(e))
+            logger.error(
+                "Unexpected error during fabric settings retrieval: %s", str(e)
+            )
             return False
 
     def test_authentication(self):
         """
         Test method to verify if authentication to NDFC server is working.
-        
+
         Returns:
             bool: True if authentication test passes, False otherwise.
         """
         logger.info("Starting NDFC authentication test...")
-        logger.debug("Test parameters - Base URL: %s, Username: %s, Domain: %s", 
-                    self.base_url, self.username, self.domain)
-        
+        logger.debug(
+            "Test parameters - Base URL: %s, Username: %s, Domain: %s",
+            self.base_url,
+            self.username,
+            self.domain,
+        )
+
         # Attempt authentication
         auth_result = self.authenticate()
-        
+
         if auth_result:
             logger.info("✓ NDFC authentication test PASSED")
-            logger.debug("Session established successfully with headers: %s", 
-                        dict(self.session.headers) if self.session else "No session")
-            
+            logger.debug(
+                "Session established successfully with headers: %s",
+                dict(self.session.headers) if self.session else "No session",
+            )
+
             # Optionally test a simple API call to verify the session works
             try:
                 # Common NDFC endpoint to test connectivity (adjust as needed)
-                test_endpoint = "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/control/fabrics"
-                test_url = f"{self.base_url}{test_endpoint}"
-                
-                logger.debug("Testing API connectivity with endpoint: %s", test_endpoint)
-                test_response = self.session.get(
-                    test_url,
-                    verify=self.ssl_verify,
-                    timeout=self.timeout
+                test_endpoint = (
+                    "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/control/fabrics"
                 )
-                
+                test_url = f"{self.base_url}{test_endpoint}"
+
+                logger.debug(
+                    "Testing API connectivity with endpoint: %s", test_endpoint
+                )
+                test_response = self.session.get(
+                    test_url, verify=self.ssl_verify, timeout=self.timeout
+                )
+
                 logger.debug("Test API call status code: %s", test_response.status_code)
-                
+
                 if test_response.status_code in [200, 201, 202]:
                     logger.info("✓ NDFC API connectivity test PASSED")
                 elif test_response.status_code == 401:
-                    logger.warning("⚠ Authentication successful but API call unauthorized - token may be invalid")
+                    logger.warning(
+                        "⚠ Authentication successful but API call unauthorized - token may be invalid"
+                    )
                 elif test_response.status_code == 404:
-                    logger.info("✓ Authentication successful (API endpoint not found is expected for test)")
+                    logger.info(
+                        "✓ Authentication successful (API endpoint not found is expected for test)"
+                    )
                 else:
-                    logger.warning("⚠ Authentication successful but API test returned status: %s", 
-                                 test_response.status_code)
-                    
+                    logger.warning(
+                        "⚠ Authentication successful but API test returned status: %s",
+                        test_response.status_code,
+                    )
+
             except Exception as e:
-                logger.warning("Authentication successful but API test failed: %s", str(e))
-                
+                logger.warning(
+                    "Authentication successful but API test failed: %s", str(e)
+                )
+
             return True
         else:
             logger.error("✗ NDFC authentication test FAILED")
@@ -345,7 +398,7 @@ class CiscoClientNDFC(CiscoClient):
             dict: Dictionary containing the collected data from all endpoints.
         """
         logger.info("Loading NDFC endpoints from %s", endpoints_yaml_file)
-        
+
         try:
             with open(endpoints_yaml_file, "r", encoding="utf-8") as f:
                 endpoints = self.yaml.load(f)
@@ -362,67 +415,104 @@ class CiscoClientNDFC(CiscoClient):
 
         # Initialize the result dictionary
         endpoint_dict = {}
-        
+
         logger.info("Processing %d endpoints", len(endpoints))
-        
+
         for endpoint in endpoints:
-            if not isinstance(endpoint, dict) or 'name' not in endpoint or 'endpoint' not in endpoint:
+            if (
+                not isinstance(endpoint, dict)
+                or "name" not in endpoint
+                or "endpoint" not in endpoint
+            ):
                 logger.warning("Skipping invalid endpoint configuration: %s", endpoint)
                 continue
-                
-            endpoint_name = endpoint['name']
-            endpoint_url = endpoint['endpoint']
-            
+
+            endpoint_name = endpoint["name"]
+            endpoint_url = endpoint["endpoint"]
+
             # Replace FABRIC_NAME placeholder with actual fabric name if provided
-            if self.fabric_name and 'FABRIC_NAME' in endpoint_url:
-                endpoint_url = endpoint_url.replace('FABRIC_NAME', self.fabric_name)
+            if self.fabric_name and "FABRIC_NAME" in endpoint_url:
+                endpoint_url = endpoint_url.replace("FABRIC_NAME", self.fabric_name)
                 logger.debug("Replaced FABRIC_NAME in URL: %s", endpoint_url)
-            
+
             # Initialize list for this endpoint if not exists
             if endpoint_name not in endpoint_dict:
                 endpoint_dict[endpoint_name] = []
-            
+
             logger.info("Fetching data from endpoint: %s", endpoint_name)
             logger.debug("Endpoint URL: %s", endpoint_url)
-            
+
             try:
                 # Make the API request
                 response = self.session.get(
                     f"{self.base_url}{endpoint_url}",
                     timeout=self.timeout,
-                    verify=self.ssl_verify
+                    verify=self.ssl_verify,
                 )
-                
+
                 logger.debug("Response status code: %s", response.status_code)
-                
+
                 if response.status_code == 200:
                     try:
                         data = response.json()
-                        logger.info("Successfully retrieved data from %s", endpoint_name)
-                        logger.debug("Response data keys: %s", 
-                                   list(data.keys()) if isinstance(data, dict) else f"List with {len(data)} items" if isinstance(data, list) else "Non-dict/list response")
-                        
+                        logger.info(
+                            "Successfully retrieved data from %s", endpoint_name
+                        )
+                        logger.debug(
+                            "Response data keys: %s",
+                            list(data.keys())
+                            if isinstance(data, dict)
+                            else f"List with {len(data)} items"
+                            if isinstance(data, list)
+                            else "Non-dict/list response",
+                        )
+
                         # Process the data using the existing process_endpoint_data method
-                        endpoint_dict = self.process_endpoint_data(endpoint, endpoint_dict, data)
-                        
+                        endpoint_dict = self.process_endpoint_data(
+                            endpoint, endpoint_dict, data
+                        )
+
                     except json.JSONDecodeError as e:
-                        logger.error("Failed to decode JSON response from %s: %s", endpoint_name, str(e))
+                        logger.error(
+                            "Failed to decode JSON response from %s: %s",
+                            endpoint_name,
+                            str(e),
+                        )
                         logger.debug("Raw response content: %s", response.text[:500])
                         # Add empty data entry for failed parsing
                         endpoint_dict[endpoint_name].append(
-                            {"data": {}, "endpoint": endpoint_url, "error": "JSON decode error"}
+                            {
+                                "data": {},
+                                "endpoint": endpoint_url,
+                                "error": "JSON decode error",
+                            }
                         )
-                        
+
                 else:
-                    logger.error("Failed to fetch data from %s. Status code: %s", endpoint_name, response.status_code)
-                    logger.debug("Error response: %s", response.text[:500] if response.text else "No response text")
+                    logger.error(
+                        "Failed to fetch data from %s. Status code: %s",
+                        endpoint_name,
+                        response.status_code,
+                    )
+                    logger.debug(
+                        "Error response: %s",
+                        response.text[:500] if response.text else "No response text",
+                    )
                     # Add empty data entry for failed request
                     endpoint_dict[endpoint_name].append(
-                        {"data": {}, "endpoint": endpoint_url, "error": f"HTTP {response.status_code}"}
+                        {
+                            "data": {},
+                            "endpoint": endpoint_url,
+                            "error": f"HTTP {response.status_code}",
+                        }
                     )
-                    
+
             except requests.exceptions.Timeout:
-                logger.error("Request to %s timed out after %s seconds", endpoint_name, self.timeout)
+                logger.error(
+                    "Request to %s timed out after %s seconds",
+                    endpoint_name,
+                    self.timeout,
+                )
                 endpoint_dict[endpoint_name].append(
                     {"data": {}, "endpoint": endpoint_url, "error": "Timeout"}
                 )
@@ -432,13 +522,15 @@ class CiscoClientNDFC(CiscoClient):
                     {"data": {}, "endpoint": endpoint_url, "error": "Connection error"}
                 )
             except Exception as e:
-                logger.error("Unexpected error fetching data from %s: %s", endpoint_name, str(e))
+                logger.error(
+                    "Unexpected error fetching data from %s: %s", endpoint_name, str(e)
+                )
                 endpoint_dict[endpoint_name].append(
                     {"data": {}, "endpoint": endpoint_url, "error": str(e)}
                 )
-        
+
         logger.info("NDFC data collection completed from %d endpoints", len(endpoints))
-        
+
         return endpoint_dict
 
     @staticmethod
@@ -455,10 +547,10 @@ class CiscoClientNDFC(CiscoClient):
         """
         # Common NDFC identifier fields
         id_fields = ["id", "uuid", "fabricName", "name", "serialNumber", "switchDbId"]
-        
+
         for field in id_fields:
             value = item.get(field)
             if value is not None:
                 return str(value)
-        
+
         return None
