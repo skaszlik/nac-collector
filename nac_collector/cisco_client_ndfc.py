@@ -1,9 +1,6 @@
 import logging
 import json
 import os
-from typing import List
-
-import click
 import requests
 import urllib3
 
