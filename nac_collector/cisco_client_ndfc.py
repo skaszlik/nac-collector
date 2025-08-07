@@ -1,6 +1,5 @@
 import logging
 import json
-import os
 import requests
 import urllib3
 
@@ -312,7 +311,9 @@ class CiscoClientNDFC(CiscoClient):
                 or "name" not in endpoint
                 or "endpoint" not in endpoint
             ):
-                logger.warning("Skipping invalid API endpoint configuration: %s", endpoint)
+                logger.warning(
+                    "Skipping invalid API endpoint configuration: %s", endpoint
+                )
                 continue
 
             endpoint_name = endpoint["name"]
@@ -325,7 +326,9 @@ class CiscoClientNDFC(CiscoClient):
 
             # Check if this is a Policies endpoint that requires filtering by discovered switch serial numbers
             if endpoint_name == "Policies" and "/policies" in endpoint_url:
-                logger.info("Processing Policies endpoint with client-side serial number filtering")
+                logger.info(
+                    "Processing Policies endpoint with client-side serial number filtering"
+                )
                 self._process_policies_endpoint_with_filtering(endpoint, endpoint_dict)
                 continue
 
@@ -341,9 +344,7 @@ class CiscoClientNDFC(CiscoClient):
                 data = self.fetch_data(endpoint_url)
 
                 if data is not None:
-                    logger.info(
-                        "Successfully retrieved data from %s", endpoint_name
-                    )
+                    logger.info("Successfully retrieved data from %s", endpoint_name)
                     logger.debug(
                         "Response data keys: %s",
                         list(data.keys())
@@ -384,18 +385,18 @@ class CiscoClientNDFC(CiscoClient):
     def save_collected_data(self, endpoint_dict, filename=None):
         """
         Save the collected endpoint data to a JSON file using the parent class write_to_json method.
-        
+
         Parameters:
             endpoint_dict (dict): The dictionary containing collected data from all endpoints.
             filename (str, optional): The filename to save to. If not provided, generates a default name.
-        
+
         Returns:
             bool: True if successful, False otherwise.
         """
         if not filename:
             fabric_suffix = f"_{self.fabric_name}" if self.fabric_name else ""
             filename = f"NDFC{fabric_suffix}_collected_data.json"
-        
+
         try:
             self.write_to_json(endpoint_dict, filename)
             logger.info("Successfully saved collected data to: %s", filename)
@@ -407,108 +408,131 @@ class CiscoClientNDFC(CiscoClient):
     def _process_policies_endpoint_with_filtering(self, endpoint, endpoint_dict):
         """
         Process Policies endpoint by fetching all policies and filtering by discovered switch serial numbers.
-        
+
         Parameters:
             endpoint (dict): The endpoint configuration containing name and endpoint URL.
             endpoint_dict (dict): The dictionary to store results in.
         """
         endpoint_name = endpoint["name"]
         endpoint_url = endpoint["endpoint"]
-        
+
         # Initialize list for this endpoint if not exists
         if endpoint_name not in endpoint_dict:
             endpoint_dict[endpoint_name] = []
-        
-        logger.info("Processing Policies endpoint with client-side filtering by serial numbers")
-        
+
+        logger.info(
+            "Processing Policies endpoint with client-side filtering by serial numbers"
+        )
+
         # First, check if we have Discovered_Switches data
         if "Discovered_Switches" not in endpoint_dict:
-            logger.error("Cannot process Policies endpoint: Discovered_Switches data not available")
-            logger.error("Make sure Discovered_Switches endpoint is defined before Policies endpoint")
-            endpoint_dict[endpoint_name].append({
-                "data": {},
-                "endpoint": endpoint_url,
-                "error": "Discovered_Switches data not available"
-            })
-            return
-        
-        # Extract serial numbers from Discovered_Switches data
-        serial_numbers = self._extract_serial_numbers_from_switches(endpoint_dict["Discovered_Switches"])
-        
-        if not serial_numbers:
-            logger.warning("No serial numbers found in Discovered_Switches data")
-            endpoint_dict[endpoint_name].append({
-                "data": {},
-                "endpoint": endpoint_url,
-                "error": "No serial numbers found in Discovered_Switches"
-            })
-            return
-        
-        logger.info("Found %d switches with serial numbers, fetching all policies for filtering", len(serial_numbers))
-        
-        try:
-            logger.debug("Fetching all policies from endpoint: %s", endpoint_url)
-            
-            # Make the API request using the parent class fetch_data method
-            all_policies_data = self.fetch_data(endpoint_url)
-            
-            if all_policies_data is not None:
-                logger.info("Successfully retrieved all policies data")
-                
-                # Filter policies based on discovered switch serial numbers
-                filtered_policies = self._filter_policies_by_serial_numbers(
-                    all_policies_data, 
-                    serial_numbers
-                )
-                
-                # Store the filtered results
-                endpoint_dict[endpoint_name].append({
-                    "data": filtered_policies,
-                    "endpoint": endpoint_url,
-                    "filtered_serial_numbers": serial_numbers,
-                    "total_policies_received": len(all_policies_data) if isinstance(all_policies_data, list) else 1,
-                    "filtered_policies_count": len(filtered_policies) if isinstance(filtered_policies, list) else 1
-                })
-                
-                logger.info(
-                    "Policy filtering completed: %d policies filtered from %d total policies for %d switches",
-                    len(filtered_policies) if isinstance(filtered_policies, list) else 1,
-                    len(all_policies_data) if isinstance(all_policies_data, list) else 1,
-                    len(serial_numbers)
-                )
-                
-            else:
-                logger.error("Failed to fetch policies data")
-                endpoint_dict[endpoint_name].append({
+            logger.error(
+                "Cannot process Policies endpoint: Discovered_Switches data not available"
+            )
+            logger.error(
+                "Make sure Discovered_Switches endpoint is defined before Policies endpoint"
+            )
+            endpoint_dict[endpoint_name].append(
+                {
                     "data": {},
                     "endpoint": endpoint_url,
-                    "error": "Failed to fetch policies data"
-                })
-                
-        except Exception as e:
-            logger.error(
-                "Unexpected error fetching policies data: %s", 
-                str(e)
+                    "error": "Discovered_Switches data not available",
+                }
             )
-            endpoint_dict[endpoint_name].append({
-                "data": {},
-                "endpoint": endpoint_url,
-                "error": str(e)
-            })
+            return
+
+        # Extract serial numbers from Discovered_Switches data
+        serial_numbers = self._extract_serial_numbers_from_switches(
+            endpoint_dict["Discovered_Switches"]
+        )
+
+        if not serial_numbers:
+            logger.warning("No serial numbers found in Discovered_Switches data")
+            endpoint_dict[endpoint_name].append(
+                {
+                    "data": {},
+                    "endpoint": endpoint_url,
+                    "error": "No serial numbers found in Discovered_Switches",
+                }
+            )
+            return
+
+        logger.info(
+            "Found %d switches with serial numbers, fetching all policies for filtering",
+            len(serial_numbers),
+        )
+
+        try:
+            logger.debug("Fetching all policies from endpoint: %s", endpoint_url)
+
+            # Make the API request using the parent class fetch_data method
+            all_policies_data = self.fetch_data(endpoint_url)
+
+            if all_policies_data is not None:
+                logger.info("Successfully retrieved all policies data")
+
+                # Filter policies based on discovered switch serial numbers
+                filtered_policies = self._filter_policies_by_serial_numbers(
+                    all_policies_data, serial_numbers
+                )
+
+                # Store the filtered results
+                endpoint_dict[endpoint_name].append(
+                    {
+                        "data": filtered_policies,
+                        "endpoint": endpoint_url,
+                        "filtered_serial_numbers": serial_numbers,
+                        "total_policies_received": len(all_policies_data)
+                        if isinstance(all_policies_data, list)
+                        else 1,
+                        "filtered_policies_count": len(filtered_policies)
+                        if isinstance(filtered_policies, list)
+                        else 1,
+                    }
+                )
+
+                logger.info(
+                    "Policy filtering completed: %d policies filtered from %d total policies for %d switches",
+                    len(filtered_policies)
+                    if isinstance(filtered_policies, list)
+                    else 1,
+                    len(all_policies_data)
+                    if isinstance(all_policies_data, list)
+                    else 1,
+                    len(serial_numbers),
+                )
+
+            else:
+                logger.error("Failed to fetch policies data")
+                endpoint_dict[endpoint_name].append(
+                    {
+                        "data": {},
+                        "endpoint": endpoint_url,
+                        "error": "Failed to fetch policies data",
+                    }
+                )
+
+        except Exception as e:
+            logger.error("Unexpected error fetching policies data: %s", str(e))
+            endpoint_dict[endpoint_name].append(
+                {"data": {}, "endpoint": endpoint_url, "error": str(e)}
+            )
 
     def _filter_policies_by_serial_numbers(self, policies_data, serial_numbers):
         """
         Filter policies data to only include policies for switches with specified serial numbers.
-        
+
         Parameters:
             policies_data (dict or list): The raw policies data from NDFC API.
             serial_numbers (list): List of serial numbers to filter by.
-            
+
         Returns:
             list: Filtered list of policies that match the serial numbers.
         """
-        logger.debug("Filtering policies data for %d serial numbers", len(serial_numbers))
-        
+        logger.debug(
+            "Filtering policies data for %d serial numbers", len(serial_numbers)
+        )
+
         # Handle different response structures
         if isinstance(policies_data, dict):
             # Check for common NDFC response patterns
@@ -524,60 +548,63 @@ class CiscoClientNDFC(CiscoClient):
         else:
             logger.warning("Unexpected policies data format: %s", type(policies_data))
             return []
-        
+
         filtered_policies = []
         serial_numbers_set = set(serial_numbers)  # Convert to set for faster lookup
-        
+
         logger.debug("Processing %d policies for filtering", len(policies_list))
-        
+
         for policy in policies_list:
             if isinstance(policy, dict) and "serialNumber" in policy:
                 policy_serial = policy["serialNumber"]
                 if policy_serial in serial_numbers_set:
                     filtered_policies.append(policy)
                     logger.debug(
-                        "Including policy %s for serial number %s", 
-                        policy.get("policyId", "unknown"), 
-                        policy_serial
+                        "Including policy %s for serial number %s",
+                        policy.get("policyId", "unknown"),
+                        policy_serial,
                     )
                 else:
                     logger.debug(
-                        "Excluding policy %s for serial number %s (not in discovered switches)", 
-                        policy.get("policyId", "unknown"), 
-                        policy_serial
+                        "Excluding policy %s for serial number %s (not in discovered switches)",
+                        policy.get("policyId", "unknown"),
+                        policy_serial,
                     )
             else:
                 logger.debug("Policy missing serialNumber field: %s", policy)
-        
+
         logger.info(
             "Policy filtering results: %d policies matched out of %d total policies",
             len(filtered_policies),
-            len(policies_list)
+            len(policies_list),
         )
-        
+
         return filtered_policies
 
     def _extract_serial_numbers_from_switches(self, discovered_switches_data):
         """
         Extract serial numbers from Discovered_Switches data.
-        
+
         Parameters:
             discovered_switches_data (list): List of Discovered_Switches data entries.
-            
+
         Returns:
             list: List of serial numbers found in the switches data.
         """
         serial_numbers = []
-        
-        logger.debug("Extracting serial numbers from %d Discovered_Switches entries", len(discovered_switches_data))
-        
+
+        logger.debug(
+            "Extracting serial numbers from %d Discovered_Switches entries",
+            len(discovered_switches_data),
+        )
+
         for entry in discovered_switches_data:
             if not isinstance(entry, dict) or "data" not in entry:
                 logger.warning("Invalid Discovered_Switches entry format: %s", entry)
                 continue
-            
+
             switches_data = entry["data"]
-            
+
             # Handle different data structures
             if isinstance(switches_data, list):
                 # Direct list of switches
@@ -589,9 +616,11 @@ class CiscoClientNDFC(CiscoClient):
                 # Single switch object
                 switches_list = [switches_data]
             else:
-                logger.warning("Unexpected switches data format: %s", type(switches_data))
+                logger.warning(
+                    "Unexpected switches data format: %s", type(switches_data)
+                )
                 continue
-            
+
             # Extract serial numbers from each switch
             for switch in switches_list:
                 if isinstance(switch, dict) and "serialNumber" in switch:
@@ -601,8 +630,11 @@ class CiscoClientNDFC(CiscoClient):
                         logger.debug("Found serial number: %s", serial_number)
                 else:
                     logger.debug("Switch entry missing serialNumber: %s", switch)
-        
-        logger.info("Extracted %d unique serial numbers from discovered switches", len(serial_numbers))
+
+        logger.info(
+            "Extracted %d unique serial numbers from discovered switches",
+            len(serial_numbers),
+        )
         return serial_numbers
 
     @staticmethod
