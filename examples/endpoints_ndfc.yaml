@@ -15,3 +15,7 @@
 # Note: All policies are fetched and then filtered client-side based on discovered switch serial numbers
 - name: Policies
   endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/control/policies
+
+# VRF configuration
+- name: VRF_Configuration
+  endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/%v/vrfs
