@@ -23,3 +23,6 @@
 # Network configuration
 - name: Network_Configuration
   endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/%v/networks
+  children:
+  - name: Network_Attachments
+    endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/%v/networks/{{network_name}}/attachments
