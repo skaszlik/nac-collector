@@ -322,7 +322,8 @@ class CiscoClientNDFC(CiscoClient):
             # Replace %v placeholder with actual fabric name if provided
             if self.fabric_name and "%v" in endpoint_url:
                 endpoint_url = endpoint_url.replace("%v", self.fabric_name)
-                logger.debug("Replaced %v in URL: %s", endpoint_url)
+                # Escape % so logging doesn't treat %v as a placeholder
+                logger.debug("Replaced %%v in URL: %s", endpoint_url)
 
             # Check if this is a Policies endpoint that requires filtering by discovered switch serial numbers
             if endpoint_name == "Policies" and "/policies" in endpoint_url:
@@ -806,6 +807,8 @@ class CiscoClientNDFC(CiscoClient):
         # Special handling for Network_Configuration endpoint
         if parent_name == "Network_Configuration":
             self._process_network_attachments(parent_endpoint, endpoint_dict)
+        elif parent_name == "VRF_Configuration":
+            self._process_vrf_attachments(parent_endpoint, endpoint_dict)
         else:
             # Generic children processing for other endpoints (if needed in the future)
             logger.warning("Generic children processing not yet implemented for: %s", parent_name)
@@ -893,6 +896,90 @@ class CiscoClientNDFC(CiscoClient):
                     else:
                         logger.debug("Skipping network with missing networkName")
 
+    def _process_vrf_attachments(self, parent_endpoint, endpoint_dict):
+        """
+        Process VRF_Attachments children endpoints for VRF_Configuration.
+        Only processes vrfs with vrfStatus = "DEPLOYED".
+
+        Parameters:
+            parent_endpoint (dict): The parent Network_Configuration endpoint.
+            endpoint_dict (dict): The dictionary containing the processed data.
+        """
+        parent_name = parent_endpoint["name"]
+        
+        # Get the children endpoint configuration
+        children_endpoints = parent_endpoint.get("children", [])
+        attachments_endpoint = None
+        
+        for child in children_endpoints:
+            if child["name"] == "VRF_Attachments":
+                attachments_endpoint = child
+                break
+        
+        if not attachments_endpoint:
+            logger.warning("VRF_Attachments child endpoint not found")
+            return
+
+        # Process each VRF_Configuration entry
+        for config_index, config_entry in enumerate(endpoint_dict[parent_name]):
+            if not config_entry.get("data"):
+                continue
+            
+            # Handle both list and single object data structures
+            vrf_data = config_entry["data"]
+            if not isinstance(vrf_data, list):
+                vrf_data = [vrf_data] if vrf_data else []
+            
+            # Process each vrf in the data
+            for vrf_index, vrf in enumerate(vrf_data):
+                vrf_status = vrf.get("vrfStatus")
+                vrf_name = vrf.get("vrfName")
+                
+                if vrf_status == "DEPLOYED" and vrf_name:
+                    logger.info("Processing VRF_Attachments for deployed vrf: %s", vrf_name)
+                    
+                    # Build the attachment endpoint URL
+                    attachment_url = attachments_endpoint["endpoint"]
+                    
+                    # Replace placeholders in the URL
+                    if self.fabric_name and "%v" in attachment_url:
+                        attachment_url = attachment_url.replace("%v", self.fabric_name)
+                    
+                    if "{{vrf_name}}" in attachment_url:
+                        attachment_url = attachment_url.replace("{{vrf_name}}", vrf_name)
+                    
+                    logger.debug("Fetching vrf attachments from: %s", attachment_url)
+                    
+                    try:
+                        # Fetch the attachment data
+                        attachment_data = self.fetch_data(attachment_url)
+                        
+                        if attachment_data is not None:
+                            logger.debug("Successfully retrieved vrf attachments for: %s", vrf_name)
+                            
+                            # Process the attachment data
+                            processed_attachments = self._process_attachment_data(attachment_data)
+                            
+                            # Add the vrf_attach_group to the vrf
+                            vrf["vrf_attach_group"] = processed_attachments
+                            
+                            logger.info("Added %d vrf attachments for vrf: %s", 
+                                      len(processed_attachments) if isinstance(processed_attachments, list) else 1, 
+                                      vrf_name)
+                        else:
+                            logger.warning("Failed to fetch vrf attachments for: %s", vrf_name)
+                            vrf["vrf_attach_group"] = []
+                    
+                    except Exception as e:
+                        logger.error("Error fetching vrf attachments for %s: %s", vrf_name, str(e))
+                        vrf["vrf_attach_group"] = []
+                else:
+                    if vrf_status != "DEPLOYED":
+                        logger.debug("Skipping vrf %s with status: %s", vrf_name or "unnamed", vrf_status)
+                    else:
+                        logger.debug("Skipping vrf with missing vrfName")
+
+    
     def _process_attachment_data(self, attachment_data):
         """
         Process the raw attachment data from the API response.
@@ -903,9 +990,23 @@ class CiscoClientNDFC(CiscoClient):
         Returns:
             list: Processed list of network attachments.
         """
+        logger.debug("Processing attachment data {{%s}}", attachment_data)
         # Handle different response structures
         if isinstance(attachment_data, list):
-            return attachment_data
+            # Check if list contains objects with lanAttachList
+            processed_data = []
+            for item in attachment_data:
+                if isinstance(item, dict) and "lanAttachList" in item:
+                    # Extract the lanAttachList from each item
+                    lan_attach_list = item["lanAttachList"]
+                    if isinstance(lan_attach_list, list):
+                        processed_data.extend(lan_attach_list)
+                    elif lan_attach_list:
+                        processed_data.append(lan_attach_list)
+                else:
+                    # Direct attachment item
+                    processed_data.append(item)
+            return processed_data
         elif isinstance(attachment_data, dict):
             # Check for common NDFC response patterns
             if "data" in attachment_data:
@@ -913,6 +1014,9 @@ class CiscoClientNDFC(CiscoClient):
                 return data if isinstance(data, list) else [data] if data else []
             elif "response" in attachment_data:
                 data = attachment_data["response"]
+                return data if isinstance(data, list) else [data] if data else []
+            elif "lanAttachList" in attachment_data:
+                data = attachment_data["lanAttachList"]
                 return data if isinstance(data, list) else [data] if data else []
             else:
                 # Direct object response - wrap in list
