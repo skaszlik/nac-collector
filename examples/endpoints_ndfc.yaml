@@ -7,12 +7,28 @@
 
 # Workflow for collecting policies bound to switches in a fabric:
 
-# Step 1: Get all switches discovered in the fabric
+# Get all switches discovered in the fabric
 - name: Discovered_Switches
   endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/control/fabrics/%v/inventory
 
-# Step 2: Get all policies in the fabric (will be filtered by discovered switch serial numbers)
+# "vtep_vip" -> this field can not be mapped (no API endpoint available)
+
+# GET VPC CONFIGURATION.
+# 1. Get all VPC pairs (all fabrics) then filter by discovered switch serial numbers (if peerOneId is in discovered switches, include the VPC pair)
+- name: VPC_Pairs
+  endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/vpcpair
+  children:
+  # 2. For each VPC pair, get the combined serial number of vPC Pair
+  - name: VPC_Combined_Serial_Number
+    endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/interface/vpcpair_serial_number?serial_number={{peerOneId}}
+
+  # 3. For each VPC pair, get policies bound to the VPC pair filtering by the combined serial number
+  - name: VPC_Combined_Serial_Number
+    endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/interface
+
+# Get all policies in the fabric (will be filtered by discovered switch serial numbers)
 # Note: All policies are fetched and then filtered client-side based on discovered switch serial numbers
+
 - name: Policies
   endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/control/policies
 
