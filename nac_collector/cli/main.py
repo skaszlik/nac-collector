@@ -1,9 +1,9 @@
 import logging
 import sys
 import time
+import os
 import click
 import errorhandler
-
 import nac_collector
 from nac_collector.cisco_client_fmc import CiscoClientFMC
 from nac_collector.cisco_client_ise import CiscoClientISE
@@ -146,7 +146,11 @@ def main(
         )
         wrapper.get_definitions()
 
-    endpoints_yaml_file = endpoints_file or f"endpoints_{solution.lower()}.yaml"
+    basefile = f"endpoints_{solution.lower()}.yaml"
+    if not os.path.isfile(basefile):
+        basefile = os.path.join("endpoints", basefile)
+
+    endpoints_yaml_file = endpoints_file or basefile
     output_file = output or f"{solution.lower()}.json"
 
     if solution == "SDWAN":
