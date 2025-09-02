@@ -1,8 +1,5 @@
 import logging
 import json
-import os
-
-import click
 import requests
 import urllib3
 
@@ -53,12 +50,12 @@ class CiscoClientNDFC(CiscoClient):
             bool: True if authentication is successful, False otherwise.
         """
         auth_url = f"{self.base_url}{self.NDFC_AUTH_ENDPOINT}"
-        
+
         # Prepare authentication payload
         auth_payload = {
             "domain": self.domain,
             "userName": self.username,
-            "userPasswd": self.password
+            "userPasswd": self.password,
         }
 
         headers = {
@@ -67,11 +64,14 @@ class CiscoClientNDFC(CiscoClient):
         }
 
         logger.debug("Attempting authentication to NDFC at: %s", auth_url)
-        logger.debug("Authentication payload: %s", {
-            "domain": self.domain,
-            "userName": self.username,
-            "userPasswd": "***REDACTED***"
-        })
+        logger.debug(
+            "Authentication payload: %s",
+            {
+                "domain": self.domain,
+                "userName": self.username,
+                "userPasswd": "***REMOVED***",
+            },
+        )
 
         try:
             response = requests.post(
@@ -82,40 +82,44 @@ class CiscoClientNDFC(CiscoClient):
                 timeout=self.timeout,
             )
 
-            logger.debug("Authentication response status code: %s", response.status_code)
+            logger.debug(
+                "Authentication response status code: %s", response.status_code
+            )
             logger.debug("Authentication response headers: %s", dict(response.headers))
 
             if response and response.status_code == 200:
                 logger.info("Authentication successful for NDFC URL: %s", auth_url)
-                
+
                 # Parse response to get token
                 response_data = response.json()
                 logger.debug("Authentication response data: %s", response_data)
-                
+
                 # NDFC typically returns the token in the response
                 # The exact key may vary, common patterns are 'token', 'access_token', or 'Jwt_Token'
                 token = None
-                for token_key in ['token', 'access_token', 'Jwt_Token', 'jwttoken']:
+                for token_key in ["token", "access_token", "Jwt_Token", "jwttoken"]:
                     if token_key in response_data:
                         token = response_data[token_key]
-                        logger.debug("Found token with key: %s", token_key)
+                        logger.debug("Found token with key: %s...", token_key[:5])
                         break
-                
+
                 if not token:
                     logger.error("No valid token found in authentication response")
-                    logger.debug("Available keys in response: %s", list(response_data.keys()))
+                    logger.debug(
+                        "Available keys in response: %s", list(response_data.keys())
+                    )
                     return False
 
                 # Extract AuthCookie from response headers for future API calls
                 auth_cookie = None
-                set_cookie_header = response.headers.get('Set-Cookie')
+                set_cookie_header = response.headers.get("Set-Cookie")
                 if set_cookie_header:
                     # Parse AuthCookie from Set-Cookie header
-                    for cookie in set_cookie_header.split(','):
-                        if 'AuthCookie=' in cookie:
-                            auth_cookie = cookie.split('AuthCookie=')[1].split(';')[0]
+                    for cookie in set_cookie_header.split(","):
+                        if "AuthCookie=" in cookie:
+                            auth_cookie = cookie.split("AuthCookie=")[1].split(";")[0]
                             break
-                    
+
                 if auth_cookie:
                     self.auth_cookie = auth_cookie
                     logger.debug("Extracted AuthCookie for future API calls")
@@ -124,23 +128,23 @@ class CiscoClientNDFC(CiscoClient):
 
                 # Create a session after successful authentication
                 self.session = requests.Session()
-                self.session.headers.update({
-                    "Content-Type": "application/json",
-                    "Accept": "application/json",
-                    "Authorization": f"Bearer {token}",
-                })
-                
+                self.session.headers.update(
+                    {
+                        "Content-Type": "application/json",
+                        "Accept": "application/json",
+                        "Authorization": f"Bearer {token}",
+                    }
+                )
+
                 # Add AuthCookie to session if available
                 if self.auth_cookie:
-                    self.session.cookies.set('AuthCookie', self.auth_cookie)
-                
-                logger.debug("Session headers configured: %s", dict(self.session.headers))
+                    self.session.cookies.set("AuthCookie", self.auth_cookie)
+
+                logger.debug(
+                    "Session headers configured: %s", dict(self.session.headers)
+                )
                 logger.info("NDFC authentication completed successfully")
-                
-                # If fabric_name is provided, fetch and save fabric settings
-                if self.fabric_name:
-                    self.fetch_and_save_fabric_settings()
-                
+
                 return True
 
             else:
@@ -153,13 +157,17 @@ class CiscoClientNDFC(CiscoClient):
                 return False
 
         except requests.exceptions.Timeout:
-            logger.error("Authentication request timed out after %s seconds", self.timeout)
+            logger.error(
+                "Authentication request timed out after %s seconds", self.timeout
+            )
             return False
         except requests.exceptions.ConnectionError as e:
             logger.error("Connection error during authentication: %s", str(e))
             return False
         except json.JSONDecodeError as e:
-            logger.error("Failed to decode JSON response during authentication: %s", str(e))
+            logger.error(
+                "Failed to decode JSON response during authentication: %s", str(e)
+            )
             return False
         except Exception as e:
             logger.error("Unexpected error during authentication: %s", str(e))
@@ -169,127 +177,53 @@ class CiscoClientNDFC(CiscoClient):
         """
         Fetch fabric settings for the specified fabric and save to JSON file.
         Uses AuthCookie for authentication.
-        
+
         Returns:
             bool: True if successful, False otherwise.
         """
         if not self.fabric_name:
             logger.error("No fabric name provided for fabric settings retrieval")
             return False
-            
+
         if not self.session:
             logger.error("No authenticated session available")
             return False
-            
-        # Construct the fabric settings API endpoint
-        fabric_endpoint = f"/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/control/fabrics/{self.fabric_name}"
-        fabric_url = f"{self.base_url}{fabric_endpoint}"
-        
-        logger.info("Fetching fabric settings for fabric: %s", self.fabric_name)
-        logger.debug("Fabric settings URL: %s", fabric_url)
-        
-        try:
-            # Make the API call using the authenticated session with AuthCookie
-            response = self.session.get(
-                fabric_url,
-                verify=self.ssl_verify,
-                timeout=self.timeout
-            )
-            
-            logger.debug("Fabric settings response status code: %s", response.status_code)
-            
-            if response.status_code == 200:
-                try:
-                    fabric_data = response.json()
-                    logger.info("Successfully retrieved fabric settings for: %s", self.fabric_name)
-                    logger.debug("Fabric settings data keys: %s", list(fabric_data.keys()) if isinstance(fabric_data, dict) else "Non-dict response")
-                    
-                    # Create resources directory if it doesn't exist
-                    resources_dir = os.path.join(os.path.dirname(__file__), "resources")
-                    if not os.path.exists(resources_dir):
-                        os.makedirs(resources_dir)
-                        logger.debug("Created resources directory: %s", resources_dir)
-                    
-                    # Save fabric settings to JSON file
-                    filename = f"NDFC_{self.fabric_name}_fabric_settings.json"
-                    filepath = os.path.join(resources_dir, filename)
-                    
-                    with open(filepath, 'w', encoding='utf-8') as f:
-                        json.dump(fabric_data, f, indent=4, ensure_ascii=False)
-                    
-                    logger.info("Fabric settings saved to: %s", filepath)
-                    return True
-                    
-                except json.JSONDecodeError as e:
-                    logger.error("Failed to decode JSON response for fabric settings: %s", str(e))
-                    logger.debug("Raw response content: %s", response.text[:500])
-                    return False
-                    
-            else:
-                logger.error("Failed to fetch fabric settings. Status code: %s", response.status_code)
-                logger.debug("Error response: %s", response.text[:500] if response.text else "No response text")
-                return False
-                
-        except requests.exceptions.Timeout:
-            logger.error("Fabric settings request timed out after %s seconds", self.timeout)
-            return False
-        except requests.exceptions.ConnectionError as e:
-            logger.error("Connection error during fabric settings retrieval: %s", str(e))
-            return False
-        except Exception as e:
-            logger.error("Unexpected error during fabric settings retrieval: %s", str(e))
-            return False
 
-    def test_authentication(self):
-        """
-        Test method to verify if authentication to NDFC server is working.
-        
-        Returns:
-            bool: True if authentication test passes, False otherwise.
-        """
-        logger.info("Starting NDFC authentication test...")
-        logger.debug("Test parameters - Base URL: %s, Username: %s, Domain: %s", 
-                    self.base_url, self.username, self.domain)
-        
-        # Attempt authentication
-        auth_result = self.authenticate()
-        
-        if auth_result:
-            logger.info("✓ NDFC authentication test PASSED")
-            logger.debug("Session established successfully with headers: %s", 
-                        dict(self.session.headers) if self.session else "No session")
-            
-            # Optionally test a simple API call to verify the session works
-            try:
-                # Common NDFC endpoint to test connectivity (adjust as needed)
-                test_endpoint = "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/control/fabrics"
-                test_url = f"{self.base_url}{test_endpoint}"
-                
-                logger.debug("Testing API connectivity with endpoint: %s", test_endpoint)
-                test_response = self.session.get(
-                    test_url,
-                    verify=self.ssl_verify,
-                    timeout=self.timeout
+        # Construct the fabric settings API endpoint
+        logger.info("Fetching fabric settings for fabric: %s", self.fabric_name)
+
+        try:
+            # Make the API call using the parent class fetch_data method
+            fabric_endpoint = f"/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/control/fabrics/{self.fabric_name}"
+            fabric_data = self.fetch_data(fabric_endpoint)
+
+            if fabric_data is not None:
+                logger.info(
+                    "Successfully retrieved fabric settings for: %s",
+                    self.fabric_name,
                 )
-                
-                logger.debug("Test API call status code: %s", test_response.status_code)
-                
-                if test_response.status_code in [200, 201, 202]:
-                    logger.info("✓ NDFC API connectivity test PASSED")
-                elif test_response.status_code == 401:
-                    logger.warning("⚠ Authentication successful but API call unauthorized - token may be invalid")
-                elif test_response.status_code == 404:
-                    logger.info("✓ Authentication successful (API endpoint not found is expected for test)")
-                else:
-                    logger.warning("⚠ Authentication successful but API test returned status: %s", 
-                                 test_response.status_code)
-                    
-            except Exception as e:
-                logger.warning("Authentication successful but API test failed: %s", str(e))
-                
-            return True
-        else:
-            logger.error("✗ NDFC authentication test FAILED")
+                logger.debug(
+                    "Fabric settings data keys: %s",
+                    list(fabric_data.keys())
+                    if isinstance(fabric_data, dict)
+                    else "Non-dict response",
+                )
+
+                # Save fabric settings to JSON file using parent class method
+                filename = f"NDFC_{self.fabric_name}_fabric_settings.json"
+                self.write_to_json(fabric_data, filename)
+
+                logger.info("Fabric settings saved to: %s", filename)
+                return True
+
+            else:
+                logger.error("Failed to fetch fabric settings")
+                return False
+
+        except Exception as e:
+            logger.error(
+                "Unexpected error during fabric settings retrieval: %s", str(e)
+            )
             return False
 
     def process_endpoint_data(self, endpoint, endpoint_dict, data, id_=None):
@@ -306,6 +240,7 @@ class CiscoClientNDFC(CiscoClient):
         Returns:
             dict: The updated endpoint dictionary with processed data.
         """
+
         if data is None:
             endpoint_dict[endpoint["name"]].append(
                 {"data": {}, "endpoint": endpoint["endpoint"]}
@@ -347,51 +282,825 @@ class CiscoClientNDFC(CiscoClient):
             endpoints_yaml_file (str): The name of the YAML file containing the endpoints.
 
         Returns:
-            dict: The final dictionary containing the data retrieved from the endpoints.
+            dict: Dictionary containing the collected data from all endpoints.
         """
-        logger.info("Loading NDFC endpoints from %s", endpoints_yaml_file)
-        
+        logger.info("Loading NDFC API endpoints from %s", endpoints_yaml_file)
+
         try:
             with open(endpoints_yaml_file, "r", encoding="utf-8") as f:
                 endpoints = self.yaml.load(f)
         except FileNotFoundError:
-            logger.error("Endpoints file not found: %s", endpoints_yaml_file)
+            logger.error("API Endpoints file not found: %s", endpoints_yaml_file)
             return {}
         except Exception as e:
-            logger.error("Error loading endpoints file: %s", str(e))
+            logger.error("Error loading API endpoints file: %s", str(e))
             return {}
 
-        # Initialize an empty dictionary
-        final_dict = {}
+        if not endpoints:
+            logger.warning("No API endpoints found in %s", endpoints_yaml_file)
+            return {}
 
-        # Iterate over all endpoints
-        with click.progressbar(endpoints, label="Processing NDFC endpoints") as endpoint_bar:
-            for endpoint in endpoint_bar:
-                logger.info("Processing NDFC endpoint: %s", endpoint["name"])
-                endpoint_dict = CiscoClient.create_endpoint_dict(endpoint)
-                
-                # Replace FABRIC_NAME placeholder with actual fabric name if provided
-                endpoint_url = endpoint["endpoint"]
-                if self.fabric_name and "FABRIC_NAME" in endpoint_url:
-                    endpoint_url = endpoint_url.replace("FABRIC_NAME", self.fabric_name)
-                    logger.debug("Replaced FABRIC_NAME with %s in endpoint: %s", self.fabric_name, endpoint_url)
-                
-                # Fetch data from the endpoint
-                data = self.fetch_data(endpoint_url)
-                
-                # Process the endpoint data and get the updated dictionary
-                endpoint_dict = self.process_endpoint_data(
-                    endpoint, endpoint_dict, data
+        # Initialize the result dictionary
+        endpoint_dict = {}
+
+        logger.info("Processing %d API endpoints", len(endpoints))
+
+        for endpoint in endpoints:
+            if (
+                not isinstance(endpoint, dict)
+                or "name" not in endpoint
+                or "endpoint" not in endpoint
+            ):
+                logger.warning(
+                    "Skipping invalid API endpoint configuration: %s", endpoint
                 )
-                
-                # TODO: Add support for children endpoints if needed for NDFC
-                # This can be implemented similar to the Catalyst Center implementation
-                
-                # Save results to dictionary
-                final_dict.update(endpoint_dict)
-                
-        logger.info("Completed processing %d NDFC endpoints", len(endpoints))
-        return final_dict
+                continue
+
+            endpoint_name = endpoint["name"]
+            endpoint_url = endpoint["endpoint"]
+
+            # Replace %v placeholder with actual fabric name if provided
+            if self.fabric_name and "%v" in endpoint_url:
+                endpoint_url = endpoint_url.replace("%v", self.fabric_name)
+                # Escape % so logging doesn't treat %v as a placeholder
+                logger.debug("Replaced %%v in URL: %s", endpoint_url)
+
+            # Check if this is a Policies endpoint that requires filtering by discovered switch serial numbers
+            if endpoint_name == "Policies" and "/policies" in endpoint_url:
+                logger.info(
+                    "Processing Policies endpoint with client-side serial number filtering"
+                )
+                self._process_policies_endpoint_with_filtering(endpoint, endpoint_dict)
+                continue
+
+            # Check if this is a VPC endpoint that requires filtering by discovered switch serial numbers
+            if endpoint_name == "VPC_Pairs" and "/vpcpair" in endpoint_url:
+                logger.info(
+                    "Processing VPC pairs endpoint with client-side serial number filtering"
+                )
+                self._process_vpc_pairs_endpoint_with_filtering(endpoint, endpoint_dict)
+                continue
+            
+            # Initialize list for this endpoint if not exists
+            if endpoint_name not in endpoint_dict:
+                endpoint_dict[endpoint_name] = []
+
+            logger.info("Fetching data from endpoint: %s", endpoint_name)
+            logger.debug("Endpoint URL: %s", endpoint_url)
+
+            try:
+                # Make the API request using the parent class fetch_data method
+                data = self.fetch_data(endpoint_url)
+
+                if data is not None:
+                    logger.info("Successfully retrieved data from %s", endpoint_name)
+                    logger.debug(
+                        "Response data keys: %s",
+                        list(data.keys())
+                        if isinstance(data, dict)
+                        else f"List with {len(data)} items"
+                        if isinstance(data, list)
+                        else "Non-dict/list response",
+                    )
+
+                    # Process the data using the existing process_endpoint_data method
+                    endpoint_dict = self.process_endpoint_data(
+                        endpoint, endpoint_dict, data
+                    )
+
+                    # Handle children endpoints
+                    if endpoint.get("children"):
+                        logger.info("Processing children endpoints for %s", endpoint_name)
+                        self._process_children_endpoints(endpoint, endpoint_dict)
+
+                else:
+                    logger.error("Failed to fetch data from %s", endpoint_name)
+                    # Add empty data entry for failed request
+                    endpoint_dict[endpoint_name].append(
+                        {
+                            "data": {},
+                            "endpoint": endpoint_url,
+                            "error": "Failed to fetch data",
+                        }
+                    )
+
+            except Exception as e:
+                logger.error(
+                    "Unexpected error fetching data from %s: %s", endpoint_name, str(e)
+                )
+                endpoint_dict[endpoint_name].append(
+                    {"data": {}, "endpoint": endpoint_url, "error": str(e)}
+                )
+
+        logger.info("NDFC data collection completed from %d endpoints", len(endpoints))
+
+        return endpoint_dict
+
+    def save_collected_data(self, endpoint_dict, filename=None):
+        """
+        Save the collected endpoint data to a JSON file using the parent class write_to_json method.
+
+        Parameters:
+            endpoint_dict (dict): The dictionary containing collected data from all endpoints.
+            filename (str, optional): The filename to save to. If not provided, generates a default name.
+
+        Returns:
+            bool: True if successful, False otherwise.
+        """
+        if not filename:
+            fabric_suffix = f"_{self.fabric_name}" if self.fabric_name else ""
+            filename = f"NDFC{fabric_suffix}_collected_data.json"
+
+        try:
+            self.write_to_json(endpoint_dict, filename)
+            logger.info("Successfully saved collected data to: %s", filename)
+            return True
+        except Exception as e:
+            logger.error("Failed to save collected data: %s", str(e))
+            return False
+
+    def _process_policies_endpoint_with_filtering(self, endpoint, endpoint_dict):
+        """
+        Process Policies endpoint by fetching all policies and filtering by discovered switch serial numbers, autogenerated policies, policies based on specific templates.
+
+        Parameters:
+            endpoint (dict): The endpoint configuration containing name and endpoint URL.
+            endpoint_dict (dict): The dictionary to store results in.
+        """
+        endpoint_name = endpoint["name"]
+        endpoint_url = endpoint["endpoint"]
+
+        # Initialize list for this endpoint if not exists
+        if endpoint_name not in endpoint_dict:
+            endpoint_dict[endpoint_name] = []
+
+        logger.info(
+            "Processing Policies endpoint with client-side filtering by serial numbers"
+        )
+
+        # Ensure Discovered_Switches data exists for serial correlation
+        if "Discovered_Switches" not in endpoint_dict:
+            logger.error(
+                "Cannot process Policies endpoint: Discovered_Switches data not available"
+            )
+            logger.error(
+                "Make sure Discovered_Switches endpoint is defined before Policies endpoint"
+            )
+            endpoint_dict[endpoint_name].append(
+                {
+                    "data": {},
+                    "endpoint": endpoint_url,
+                    "error": "Discovered_Switches data not available",
+                }
+            )
+            return
+
+        try:
+            logger.debug("Fetching all policies from endpoint: %s", endpoint_url)
+
+            # Make the API request using the parent class fetch_data method
+            all_policies_data = self.fetch_data(endpoint_url)
+
+            if all_policies_data is not None:
+                logger.info("Successfully retrieved all policies data")
+
+                # For reporting/metadata only: gather serials from Discovered_Switches
+                serial_numbers = self._extract_serial_numbers_from_switches(
+                    endpoint_dict["Discovered_Switches"]
+                )
+
+                if not serial_numbers:
+                    logger.warning("No serial numbers found in Discovered_Switches data")
+                    endpoint_dict[endpoint_name].append(
+                        {
+                            "data": {},
+                            "endpoint": endpoint_url,
+                            "error": "No serial numbers found in Discovered_Switches",
+                        }
+                    )
+                    return
+
+                logger.info(
+                    "Found %d switches with serial numbers, filtering policies",
+                    len(serial_numbers),
+                )
+
+                # Filter policies based on discovered switch serial numbers (extracted internally)
+                filtered_policies = self._filter_by_discovered_Serial_numbers(
+                    all_policies_data, endpoint_dict
+                )
+
+                # Filter out autogenerated policies
+                filtered_policies = self._filter_autogenerated_policies(filtered_policies)
+
+                #Filter out policies that are based on templates: 'Default_VRF_Universal' or 'Default_Network_Universal' 
+                filtered_policies = self._filter_specyfic_template_policies(
+                    filtered_policies,
+                    ["Default_VRF_Universal", "Default_Network_Universal", "NA"]
+                ) 
+
+                # Store the filtered results
+                endpoint_dict[endpoint_name].append(
+                    {
+                        "data": filtered_policies,
+                        "endpoint": endpoint_url,
+                        "filtered_serial_numbers": serial_numbers,
+                        "total_policies_received": len(all_policies_data)
+                        if isinstance(all_policies_data, list)
+                        else 1,
+                        "filtered_policies_count": len(filtered_policies)
+                        if isinstance(filtered_policies, list)
+                        else 1,
+                    }
+                )
+
+                logger.info(
+                    "Policy filtering completed: %d policies filtered from %d total policies for %d switches",
+                    len(filtered_policies)
+                    if isinstance(filtered_policies, list)
+                    else 1,
+                    len(all_policies_data)
+                    if isinstance(all_policies_data, list)
+                    else 1,
+                    len(serial_numbers),
+                )
+
+            else:
+                logger.error("Failed to fetch policies data")
+                endpoint_dict[endpoint_name].append(
+                    {
+                        "data": {},
+                        "endpoint": endpoint_url,
+                        "error": "Failed to fetch policies data",
+                    }
+                )
+
+        except Exception as e:
+            logger.error("Unexpected error fetching policies data: %s", str(e))
+            endpoint_dict[endpoint_name].append(
+                {"data": {}, "endpoint": endpoint_url, "error": str(e)}
+            )
+
+    def _process_vpc_pairs_endpoint_with_filtering(self, endpoint, endpoint_dict):
+        """
+        Process VPC_Pairs endpoint by fetching all VPC pairs and filtering by discovered switch serial numbers.
+        Based on the YAML specification, VPC pairs are filtered if peerOneId or peerTwoId match discovered switches.
+
+        Parameters:
+            endpoint (dict): The endpoint configuration containing name and endpoint URL.
+            endpoint_dict (dict): The dictionary to store results in.
+        """
+        endpoint_name = endpoint["name"]
+        endpoint_url = endpoint["endpoint"]
+
+        # Initialize list for this endpoint if not exists
+        if endpoint_name not in endpoint_dict:
+            endpoint_dict[endpoint_name] = []
+
+        logger.info(
+            "Processing VPC_Pairs endpoint with client-side filtering by serial numbers"
+        )
+
+        # Ensure Discovered_Switches data exists for serial correlation
+        if "Discovered_Switches" not in endpoint_dict:
+            logger.error(
+                "Cannot process VPC_Pairs endpoint: Discovered_Switches data not available"
+            )
+            logger.error(
+                "Make sure Discovered_Switches endpoint is defined before VPC_Pairs endpoint"
+            )
+            endpoint_dict[endpoint_name].append(
+                {
+                    "data": {},
+                    "endpoint": endpoint_url,
+                    "error": "Discovered_Switches data not available",
+                }
+            )
+            return
+
+        try:
+            logger.debug("Fetching all VPC pairs from endpoint: %s", endpoint_url)
+
+            # Make the API request using the parent class fetch_data method
+            all_vpc_data = self.fetch_data(endpoint_url)
+
+            if all_vpc_data is not None:
+                logger.info("Successfully retrieved all VPC pairs data")
+
+                # For reporting/metadata only: gather serials from Discovered_Switches
+                serial_numbers = self._extract_serial_numbers_from_switches(
+                    endpoint_dict["Discovered_Switches"]
+                )
+
+                if not serial_numbers:
+                    logger.warning("No serial numbers found in Discovered_Switches data")
+                    endpoint_dict[endpoint_name].append(
+                        {
+                            "data": {},
+                            "endpoint": endpoint_url,
+                            "error": "No serial numbers found in Discovered_Switches",
+                        }
+                    )
+                    return
+
+                logger.info(
+                    "Found %d switches with serial numbers, filtering VPC pairs",
+                    len(serial_numbers),
+                )
+
+                # Filter VPC pairs based on discovered switch serial numbers
+                # Use peerOneId and peerTwoId fields as per YAML specification
+                filtered_vpc_pairs = self._filter_by_discovered_Serial_numbers(
+                    all_vpc_data, endpoint_dict, serial_fields=["peerOneId", "peerTwoId"], match_any=True
+                )
+
+                # Enrich filtered VPC pairs with VPC domain information
+                self._enrich_vpc_pairs_with_domain_info(filtered_vpc_pairs, endpoint_dict)
+
+                # Store the filtered results
+                endpoint_dict[endpoint_name].append(
+                    {
+                        "data": filtered_vpc_pairs,
+                        "endpoint": endpoint_url,
+                        "filtered_serial_numbers": serial_numbers,
+                        "total_vpc_pairs_received": len(all_vpc_data)
+                        if isinstance(all_vpc_data, list)
+                        else 1,
+                        "filtered_vpc_pairs_count": len(filtered_vpc_pairs)
+                        if isinstance(filtered_vpc_pairs, list)
+                        else 1,
+                    }
+                )
+
+                logger.info(
+                    "VPC pairs filtering completed: %d VPC pairs filtered from %d total pairs for %d switches",
+                    len(filtered_vpc_pairs)
+                    if isinstance(filtered_vpc_pairs, list)
+                    else 1,
+                    len(all_vpc_data)
+                    if isinstance(all_vpc_data, list)
+                    else 1,
+                    len(serial_numbers),
+                )
+
+                # Handle children endpoints for VPC pairs (VPC_Combined_Serial_Number)
+                if endpoint.get("children"):
+                    logger.info("Processing children endpoints for %s", endpoint_name)
+                    self._process_vpc_children_endpoints(endpoint, endpoint_dict, filtered_vpc_pairs)
+
+            else:
+                logger.error("Failed to fetch VPC pairs data")
+                endpoint_dict[endpoint_name].append(
+                    {
+                        "data": {},
+                        "endpoint": endpoint_url,
+                        "error": "Failed to fetch VPC pairs data",
+                    }
+                )
+
+        except Exception as e:
+            logger.error("Unexpected error fetching VPC pairs data: %s", str(e))
+            endpoint_dict[endpoint_name].append(
+                {"data": {}, "endpoint": endpoint_url, "error": str(e)}
+            )
+
+    def _filter_by_discovered_Serial_numbers(
+        self,
+        data,
+        endpoint_dict,
+        serial_fields=None,
+        match_any=True,
+    ):
+        """
+        Filter items to include only those that reference serial numbers discovered in
+        the previously fetched Discovered_Switches endpoint.
+
+        This is generalized for any endpoint payload (Policies, VPC pairs, etc.).
+
+        Parameters:
+            data (dict or list): Raw data returned from an API endpoint (can be a list
+                of items or a dict possibly wrapped in common keys like 'data'/'response').
+            endpoint_dict (dict): The aggregate endpoints dictionary containing
+                'Discovered_Switches' entries used to extract serial numbers.
+            serial_fields (str | list[str] | None): Optional field paths to check for
+                serial numbers within each item. Supports dot-separated nested paths.
+                When None, a recursive heuristic search looks for keys containing
+                'serial'.
+            match_any (bool): If True, include an item when any field path contains a
+                serial matching the discovered serials; if False, require all provided
+                field paths to match.
+
+        Returns:
+            list: Filtered list of items that reference the discovered serial numbers.
+        """
+        # Guard: ensure Discovered_Switches exist
+        if "Discovered_Switches" not in endpoint_dict:
+            logger.error(
+                "Discovered_Switches data not available in endpoint_dict; skipping serial filtering"
+            )
+            return []
+
+        discovered_serials = self._extract_serial_numbers_from_switches(
+            endpoint_dict["Discovered_Switches"]
+        )
+        serial_set = set(sn for sn in discovered_serials if sn)
+        logger.debug(
+            "Filtering endpoint items by discovered serial numbers (count=%d), fields=%s",
+            len(serial_set),
+            serial_fields if serial_fields is not None else "<auto>",
+        )
+        if not serial_set:
+            logger.warning("No discovered serial numbers found; returning empty result")
+            return []
+
+        # Normalize incoming payload into a list of items
+        items = []
+        if isinstance(data, list):
+            items = data
+        elif isinstance(data, dict):
+            if "data" in data and isinstance(data["data"], list):
+                items = data["data"]
+            elif "response" in data and isinstance(data["response"], list):
+                items = data["response"]
+            else:
+                # Single object; treat as one item
+                items = [data]
+        else:
+            logger.warning("Unexpected endpoint data format: %s", type(data))
+            return []
+
+        def _iter_values_by_path(obj, path):
+            """Yield values from obj following a dot-separated path. Supports list traversal."""
+            if obj is None:
+                return
+            if not path:
+                yield obj
+                return
+            head, *tail = path.split(".")
+            tail_path = ".".join(tail) if tail else ""
+            if isinstance(obj, dict):
+                if head in obj:
+                    yield from _iter_values_by_path(obj[head], tail_path)
+            elif isinstance(obj, list):
+                # Head could be an index or a wildcard-like segment; try to cast to int
+                idx = None
+                try:
+                    idx = int(head)
+                except Exception:
+                    idx = None
+                if idx is not None:
+                    if 0 <= idx < len(obj):
+                        yield from _iter_values_by_path(obj[idx], tail_path)
+                else:
+                    # Iterate all and keep walking
+                    for el in obj:
+                        yield from _iter_values_by_path(el, tail_path or head)
+
+        def _recursive_serial_candidates(obj):
+            """Recursively find candidate serial values by key heuristics (auto mode)."""
+            if obj is None:
+                return []
+            candidates = []
+            if isinstance(obj, dict):
+                for k, v in obj.items():
+                    key_lower = str(k).lower()
+                    if "serial" in key_lower:  # matches 'serial', 'serialnumber', etc.
+                        if isinstance(v, (str, int)):
+                            candidates.append(str(v))
+                        elif isinstance(v, list):
+                            for el in v:
+                                if isinstance(el, (str, int)):
+                                    candidates.append(str(el))
+                                else:
+                                    candidates.extend(_recursive_serial_candidates(el))
+                        elif isinstance(v, dict):
+                            candidates.extend(_recursive_serial_candidates(v))
+                    else:
+                        candidates.extend(_recursive_serial_candidates(v))
+            elif isinstance(obj, list):
+                for el in obj:
+                    candidates.extend(_recursive_serial_candidates(el))
+            return candidates
+
+        # Normalize serial_fields to a list of paths or None
+        if isinstance(serial_fields, str):
+            fields_to_check = [serial_fields]
+        elif isinstance(serial_fields, list) and all(isinstance(f, str) for f in serial_fields):
+            fields_to_check = serial_fields
+        else:
+            fields_to_check = None  # auto/heuristic mode
+
+        filtered_items = []
+
+        logger.debug("Processing %d items for serial filtering", len(items))
+
+        for item in items:
+            if not isinstance(item, dict):
+                logger.debug("Skipping non-dict item: %s", item)
+                continue
+
+            matched = False
+
+            if fields_to_check:
+                # Gather discovered serials per field
+                discovered_by_field = []
+                for path in fields_to_check:
+                    values = [
+                        str(v)
+                        for v in _iter_values_by_path(item, path)
+                        if isinstance(v, (str, int))
+                    ]
+                    discovered_by_field.append(set(values))
+
+                if match_any:
+                    # Any field containing a matching serial passes
+                    matched = any(bool(s & serial_set) for s in discovered_by_field)
+                else:
+                    # All fields must contain at least one matching serial
+                    matched = all(bool(s & serial_set) for s in discovered_by_field)
+            else:
+                # Auto/heuristic mode: recursively scan keys containing 'serial'
+                candidates = set(_recursive_serial_candidates(item))
+                matched = bool(candidates & serial_set)
+
+            if matched:
+                filtered_items.append(item)
+
+        logger.info(
+            "Serial filtering results: %d items matched out of %d total items",
+            len(filtered_items),
+            len(items),
+        )
+
+        return filtered_items
+
+    def _filter_autogenerated_policies(self, policies_data):
+        """
+        Filter policies data to only include policies with "autoGenerated" set to false.
+
+        Parameters:
+            policies_data (dict or list): The raw policies data from NDFC API.
+
+        Returns:
+            list: Filtered list of policies 
+        """
+
+
+        # Handle different response structures
+        if isinstance(policies_data, dict):
+            # Check for common NDFC response patterns
+            if "data" in policies_data and isinstance(policies_data["data"], list):
+                policies_list = policies_data["data"]
+            elif isinstance(policies_data, dict):
+                # Single policy object - convert to list for consistent processing
+                policies_list = [policies_data]
+            else:
+                policies_list = []
+        elif isinstance(policies_data, list):
+            policies_list = policies_data
+        else:
+            logger.warning("Unexpected policies data format: %s", type(policies_data))
+            return []
+
+        filtered_policies = []
+
+        logger.debug("Processing %d policies for filtering", len(policies_list))
+
+        for policy in policies_list:
+            if isinstance(policy, dict) and "autoGenerated" in policy:
+                if isinstance(policy["autoGenerated"], bool):
+                    # Only include policies where autoGenerated is False
+                    if not policy["autoGenerated"]:
+                        filtered_policies.append(policy)
+                        logger.debug(
+                            "Including non-autogenerated policy %s",
+                            policy.get("policyId", "unknown"),
+                        )
+                    else:
+                        logger.debug(
+                            "Excluding autogenerated policy %s",
+                            policy.get("policyId", "unknown"),
+                        )
+            else:
+                logger.debug("Policy missing autoGenerated field: %s", policy)
+
+        logger.info(
+            "Policy filtering results: %d policies matched out of %d total policies",
+            len(filtered_policies),
+            len(policies_list),
+        )
+
+        return filtered_policies
+
+    def _filter_specyfic_template_policies(self, policies_data, template_names):
+        """
+        Filter out policies data which are based on specific templates.
+
+        Parameters:
+            policies_data (dict or list): The raw policies data from NDFC API.
+            template_names (list): List of template names to filter out.
+
+        Returns:
+            list: Filtered list of policies 
+        """
+
+
+        # Handle different response structures
+        if isinstance(policies_data, dict):
+            # Check for common NDFC response patterns
+            if "data" in policies_data and isinstance(policies_data["data"], list):
+                policies_list = policies_data["data"]
+            elif isinstance(policies_data, dict):
+                # Single policy object - convert to list for consistent processing
+                policies_list = [policies_data]
+            else:
+                policies_list = []
+        elif isinstance(policies_data, list):
+            policies_list = policies_data
+        else:
+            logger.warning("Unexpected policies data format: %s", type(policies_data))
+            return []
+
+        filtered_policies = []
+        template_names_set = set(template_names)  # Convert to set for faster lookup
+
+        logger.debug("Processing %d policies for filtering", len(policies_list))
+
+        for policy in policies_list:
+            if isinstance(policy, dict) and "templateName" in policy:
+                if isinstance(policy["templateName"], str):
+                    # Only include policies where autoGenerated is False
+                    if policy["templateName"] not in template_names_set:
+                        filtered_policies.append(policy)
+                        logger.debug(
+                            "Including policy %s",
+                            policy.get("policyId", "unknown"),
+                        )
+                    else:
+                        logger.debug(
+                            "Excluding templated policy %s",
+                            policy.get("policyId", "unknown"),
+                        )
+            else:
+                logger.debug("Policy missing templateName field: %s", policy)
+
+        logger.info(
+            "Policy filtering results: %d policies matched out of %d total policies",
+            len(filtered_policies),
+            len(policies_list),
+        )
+
+        return filtered_policies
+
+    def _extract_serial_numbers_from_switches(self, discovered_switches_data):
+        """
+        Extract serial numbers from Discovered_Switches data.
+
+        Parameters:
+            discovered_switches_data (list): List of Discovered_Switches data entries.
+
+        Returns:
+            list: List of serial numbers found in the switches data.
+        """
+        serial_numbers = []
+
+        logger.debug(
+            "Extracting serial numbers from %d Discovered_Switches entries",
+            len(discovered_switches_data),
+        )
+
+        for entry in discovered_switches_data:
+            if not isinstance(entry, dict) or "data" not in entry:
+                logger.warning("Invalid Discovered_Switches entry format: %s", entry)
+                continue
+
+            switches_data = entry["data"]
+
+            # Handle different data structures
+            if isinstance(switches_data, list):
+                # Direct list of switches
+                switches_list = switches_data
+            elif isinstance(switches_data, dict) and "data" in switches_data:
+                # Wrapped in data object
+                switches_list = switches_data["data"]
+            elif isinstance(switches_data, dict):
+                # Single switch object
+                switches_list = [switches_data]
+            else:
+                logger.warning(
+                    "Unexpected switches data format: %s", type(switches_data)
+                )
+                continue
+
+            # Extract serial numbers from each switch
+            for switch in switches_list:
+                if isinstance(switch, dict) and "serialNumber" in switch:
+                    serial_number = switch["serialNumber"]
+                    if serial_number and serial_number not in serial_numbers:
+                        serial_numbers.append(serial_number)
+                        logger.debug("Found serial number: %s", serial_number)
+                else:
+                    logger.debug("Switch entry missing serialNumber: %s", switch)
+
+        logger.info(
+            "Extracted %d unique serial numbers from discovered switches",
+            len(serial_numbers),
+        )
+        return serial_numbers
+
+    def _enrich_vpc_pairs_with_domain_info(self, vpc_pairs_data, endpoint_dict):
+        """
+        Enrich VPC pairs data with VPC domain information from discovered switches.
+
+        Parameters:
+            vpc_pairs_data (list): List of VPC pairs to enrich.
+            endpoint_dict (dict): The dictionary containing all endpoint data including Discovered_Switches.
+        """
+        if not vpc_pairs_data or not isinstance(vpc_pairs_data, list):
+            logger.debug("No VPC pairs data to enrich")
+            return
+
+        if "Discovered_Switches" not in endpoint_dict:
+            logger.warning("Cannot enrich VPC pairs: Discovered_Switches data not available")
+            return
+
+        discovered_switches_data = endpoint_dict["Discovered_Switches"]
+        logger.debug("Enriching %d VPC pairs with VPC domain information", len(vpc_pairs_data))
+
+        for vpc_pair in vpc_pairs_data:
+            if not isinstance(vpc_pair, dict):
+                continue
+
+            # Get serial numbers from the VPC pair
+            peer_one_serial = vpc_pair.get("peerOneId")
+            peer_two_serial = vpc_pair.get("peerTwoId")
+
+            if not peer_one_serial or not peer_two_serial:
+                logger.debug("VPC pair missing peer serial numbers: %s", vpc_pair)
+                continue
+
+            # Try to get VPC domain from either peer (should be the same)
+            vpc_domain = self._extract_vpc_domain_from_switches(discovered_switches_data, peer_one_serial)
+            
+            if vpc_domain is None:
+                # Try the second peer if first one didn't have VPC domain info
+                vpc_domain = self._extract_vpc_domain_from_switches(discovered_switches_data, peer_two_serial)
+
+            if vpc_domain is not None:
+                # Add VPC domain as the first field in the VPC pair object
+                vpc_pair["vpcDomain"] = vpc_domain
+                logger.debug("Added VPC domain %s to VPC pair with peers %s/%s", 
+                           vpc_domain, peer_one_serial, peer_two_serial)
+            else:
+                logger.debug("No VPC domain found for VPC pair with peers %s/%s", 
+                           peer_one_serial, peer_two_serial)
+
+        logger.info("VPC pairs enrichment completed")
+
+    def _extract_vpc_domain_from_switches(self, discovered_switches_data, serial_number):
+        """
+        Extract VPC domain information for a specific serial number from Discovered_Switches data.
+
+        Parameters:
+            discovered_switches_data (list): List of Discovered_Switches data entries.
+            serial_number (str): The serial number to find VPC domain for.
+
+        Returns:
+            int or None: The VPC domain ID if found, None otherwise.
+        """
+        logger.debug(
+            "Extracting VPC domain for serial number: %s",
+            serial_number,
+        )
+
+        for entry in discovered_switches_data:
+            if not isinstance(entry, dict) or "data" not in entry:
+                continue
+
+            switches_data = entry["data"]
+
+            # Handle different data structures
+            if isinstance(switches_data, list):
+                switches_list = switches_data
+            elif isinstance(switches_data, dict) and "data" in switches_data:
+                switches_list = switches_data["data"]
+            elif isinstance(switches_data, dict):
+                switches_list = [switches_data]
+            else:
+                continue
+
+            # Find the switch with matching serial number and extract VPC domain
+            for switch in switches_list:
+                if (isinstance(switch, dict) 
+                    and switch.get("serialNumber") == serial_number 
+                    and "vpcDomain" in switch):
+                    vpc_domain = switch["vpcDomain"]
+                    if vpc_domain and vpc_domain > 0:  # Valid VPC domain
+                        logger.debug("Found VPC domain %s for serial %s", vpc_domain, serial_number)
+                        return vpc_domain
+
+        logger.debug("No VPC domain found for serial number: %s", serial_number)
+        return None
 
     @staticmethod
     def get_id_value(item):
@@ -407,10 +1116,440 @@ class CiscoClientNDFC(CiscoClient):
         """
         # Common NDFC identifier fields
         id_fields = ["id", "uuid", "fabricName", "name", "serialNumber", "switchDbId"]
-        
+
         for field in id_fields:
             value = item.get(field)
             if value is not None:
                 return str(value)
-        
+
         return None
+
+    def _process_children_endpoints(self, parent_endpoint, endpoint_dict):
+        """
+        Process children endpoints for a given parent endpoint.
+        Specifically handles Network_Configuration -> Network_Attachments logic.
+
+        Parameters:
+            parent_endpoint (dict): The parent endpoint configuration.
+            endpoint_dict (dict): The dictionary containing the processed data.
+        """
+        parent_name = parent_endpoint["name"]
+        logger.debug("Processing children endpoints for parent: %s", parent_name)
+
+        # Special handling for Network_Configuration endpoint
+        if parent_name == "Network_Configuration":
+            self._process_network_attachments(parent_endpoint, endpoint_dict)
+        elif parent_name == "VRF_Configuration":
+            self._process_vrf_attachments(parent_endpoint, endpoint_dict)
+        else:
+            # Generic children processing for other endpoints (if needed in the future)
+            logger.warning("Generic children processing not yet implemented for: %s", parent_name)
+
+    def _process_network_attachments(self, parent_endpoint, endpoint_dict):
+        """
+        Process Network_Attachments children endpoints for Network_Configuration.
+        Only processes networks with networkStatus = "DEPLOYED".
+
+        Parameters:
+            parent_endpoint (dict): The parent Network_Configuration endpoint.
+            endpoint_dict (dict): The dictionary containing the processed data.
+        """
+        parent_name = parent_endpoint["name"]
+        
+        # Get the children endpoint configuration
+        children_endpoints = parent_endpoint.get("children", [])
+        attachments_endpoint = None
+        
+        for child in children_endpoints:
+            if child["name"] == "Network_Attachments":
+                attachments_endpoint = child
+                break
+        
+        if not attachments_endpoint:
+            logger.warning("Network_Attachments child endpoint not found")
+            return
+
+        # Process each Network_Configuration entry
+        for config_index, config_entry in enumerate(endpoint_dict[parent_name]):
+            if not config_entry.get("data"):
+                continue
+            
+            # Handle both list and single object data structures
+            networks_data = config_entry["data"]
+            if not isinstance(networks_data, list):
+                networks_data = [networks_data] if networks_data else []
+            
+            # Process each network in the data
+            for network_index, network in enumerate(networks_data):
+                network_status = network.get("networkStatus")
+                network_name = network.get("networkName")
+                
+                if network_status == "DEPLOYED" and network_name:
+                    logger.info("Processing Network_Attachments for deployed network: %s", network_name)
+                    
+                    # Build the attachment endpoint URL
+                    attachment_url = attachments_endpoint["endpoint"]
+                    
+                    # Replace placeholders in the URL
+                    if self.fabric_name and "%v" in attachment_url:
+                        attachment_url = attachment_url.replace("%v", self.fabric_name)
+                    
+                    if "{{network_name}}" in attachment_url:
+                        attachment_url = attachment_url.replace("{{network_name}}", network_name)
+                    
+                    logger.debug("Fetching network attachments from: %s", attachment_url)
+                    
+                    try:
+                        # Fetch the attachment data
+                        attachment_data = self.fetch_data(attachment_url)
+                        
+                        if attachment_data is not None:
+                            logger.debug("Successfully retrieved network attachments for: %s", network_name)
+                            
+                            # Process the attachment data
+                            processed_attachments = self._process_attachment_data(attachment_data)
+                            
+                            # Add the network_attach_group to the network
+                            network["network_attach_group"] = processed_attachments
+                            
+                            logger.info("Added %d network attachments for network: %s", 
+                                      len(processed_attachments) if isinstance(processed_attachments, list) else 1, 
+                                      network_name)
+                        else:
+                            logger.warning("Failed to fetch network attachments for: %s", network_name)
+                            network["network_attach_group"] = []
+                    
+                    except Exception as e:
+                        logger.error("Error fetching network attachments for %s: %s", network_name, str(e))
+                        network["network_attach_group"] = []
+                else:
+                    if network_status != "DEPLOYED":
+                        logger.debug("Skipping network %s with status: %s", network_name or "unnamed", network_status)
+                    else:
+                        logger.debug("Skipping network with missing networkName")
+
+    def _process_vrf_attachments(self, parent_endpoint, endpoint_dict):
+        """
+        Process VRF_Attachments children endpoints for VRF_Configuration.
+        Only processes vrfs with vrfStatus = "DEPLOYED".
+
+        Parameters:
+            parent_endpoint (dict): The parent Network_Configuration endpoint.
+            endpoint_dict (dict): The dictionary containing the processed data.
+        """
+        parent_name = parent_endpoint["name"]
+        
+        # Get the children endpoint configuration
+        children_endpoints = parent_endpoint.get("children", [])
+        attachments_endpoint = None
+        
+        for child in children_endpoints:
+            if child["name"] == "VRF_Attachments":
+                attachments_endpoint = child
+                break
+        
+        if not attachments_endpoint:
+            logger.warning("VRF_Attachments child endpoint not found")
+            return
+
+        # Process each VRF_Configuration entry
+        for config_index, config_entry in enumerate(endpoint_dict[parent_name]):
+            if not config_entry.get("data"):
+                continue
+            
+            # Handle both list and single object data structures
+            vrf_data = config_entry["data"]
+            if not isinstance(vrf_data, list):
+                vrf_data = [vrf_data] if vrf_data else []
+            
+            # Process each vrf in the data
+            for vrf_index, vrf in enumerate(vrf_data):
+                vrf_status = vrf.get("vrfStatus")
+                vrf_name = vrf.get("vrfName")
+                
+                if vrf_status == "DEPLOYED" and vrf_name:
+                    logger.info("Processing VRF_Attachments for deployed vrf: %s", vrf_name)
+                    
+                    # Build the attachment endpoint URL
+                    attachment_url = attachments_endpoint["endpoint"]
+                    
+                    # Replace placeholders in the URL
+                    if self.fabric_name and "%v" in attachment_url:
+                        attachment_url = attachment_url.replace("%v", self.fabric_name)
+                    
+                    if "{{vrf_name}}" in attachment_url:
+                        attachment_url = attachment_url.replace("{{vrf_name}}", vrf_name)
+                    
+                    logger.debug("Fetching vrf attachments from: %s", attachment_url)
+                    
+                    try:
+                        # Fetch the attachment data
+                        attachment_data = self.fetch_data(attachment_url)
+                        
+                        if attachment_data is not None:
+                            logger.debug("Successfully retrieved vrf attachments for: %s", vrf_name)
+                            
+                            # Process the attachment data
+                            processed_attachments = self._process_attachment_data(attachment_data)
+                            
+                            # Add the vrf_attach_group to the vrf
+                            vrf["vrf_attach_group"] = processed_attachments
+                            
+                            logger.info("Added %d vrf attachments for vrf: %s", 
+                                      len(processed_attachments) if isinstance(processed_attachments, list) else 1, 
+                                      vrf_name)
+                        else:
+                            logger.warning("Failed to fetch vrf attachments for: %s", vrf_name)
+                            vrf["vrf_attach_group"] = []
+                    
+                    except Exception as e:
+                        logger.error("Error fetching vrf attachments for %s: %s", vrf_name, str(e))
+                        vrf["vrf_attach_group"] = []
+                else:
+                    if vrf_status != "DEPLOYED":
+                        logger.debug("Skipping vrf %s with status: %s", vrf_name or "unnamed", vrf_status)
+                    else:
+                        logger.debug("Skipping vrf with missing vrfName")
+
+    
+    def _process_attachment_data(self, attachment_data):
+        """
+        Process the raw attachment data from the API response.
+        
+        Parameters:
+            attachment_data (dict or list): Raw attachment data from NDFC API.
+            
+        Returns:
+            list: Processed list of network attachments.
+        """
+        logger.debug("Processing attachment data {{%s}}", attachment_data)
+        # Handle different response structures
+        if isinstance(attachment_data, list):
+            # Check if list contains objects with lanAttachList
+            processed_data = []
+            for item in attachment_data:
+                if isinstance(item, dict) and "lanAttachList" in item:
+                    # Extract the lanAttachList from each item
+                    lan_attach_list = item["lanAttachList"]
+                    if isinstance(lan_attach_list, list):
+                        processed_data.extend(lan_attach_list)
+                    elif lan_attach_list:
+                        processed_data.append(lan_attach_list)
+                else:
+                    # Direct attachment item
+                    processed_data.append(item)
+            return processed_data
+        elif isinstance(attachment_data, dict):
+            # Check for common NDFC response patterns
+            if "data" in attachment_data:
+                data = attachment_data["data"]
+                return data if isinstance(data, list) else [data] if data else []
+            elif "response" in attachment_data:
+                data = attachment_data["response"]
+                return data if isinstance(data, list) else [data] if data else []
+            elif "lanAttachList" in attachment_data:
+                data = attachment_data["lanAttachList"]
+                return data if isinstance(data, list) else [data] if data else []
+            else:
+                # Direct object response - wrap in list
+                return [attachment_data]
+        else:
+            logger.warning("Unexpected attachment data type: %s", type(attachment_data))
+            return []
+
+    def _process_vpc_children_endpoints(self, parent_endpoint, endpoint_dict, filtered_vpc_pairs):
+        """
+        Process VPC children endpoints for VPC_Pairs.
+        Handles VPC_Combined_Serial_Number endpoint as per YAML specification.
+
+        Parameters:
+            parent_endpoint (dict): The parent VPC_Pairs endpoint.
+            endpoint_dict (dict): The dictionary containing the processed data.
+            filtered_vpc_pairs (list): List of filtered VPC pairs to process.
+        """
+        parent_name = parent_endpoint["name"]
+        
+        # Get the children endpoint configuration
+        children_endpoints = parent_endpoint.get("children", [])
+        
+        for child_endpoint in children_endpoints:
+            child_name = child_endpoint["name"]
+            child_url = child_endpoint["endpoint"]
+            
+            # Initialize list for this child endpoint if not exists
+            if child_name not in endpoint_dict:
+                endpoint_dict[child_name] = []
+            
+            logger.info("Processing VPC child endpoint: %s", child_name)
+            
+            # Process each VPC pair
+            for vpc_pair in filtered_vpc_pairs:
+                if not isinstance(vpc_pair, dict):
+                    continue
+                
+                peer_one_id = vpc_pair.get("peerOneId")
+                peer_two_id = vpc_pair.get("peerTwoId")
+                
+                if not peer_one_id:
+                    logger.debug("Skipping VPC pair without peerOneId: %s", vpc_pair)
+                    continue
+                
+                # Replace placeholders in the URL
+                processed_url = child_url
+                if self.fabric_name and "%v" in processed_url:
+                    processed_url = processed_url.replace("%v", self.fabric_name)
+                
+                if "{{peerOneId}}" in processed_url:
+                    processed_url = processed_url.replace("{{peerOneId}}", peer_one_id)
+                
+                logger.debug("Fetching VPC child data from: %s", processed_url)
+                
+                try:
+                    # Fetch the child data
+                    child_data = self.fetch_data(processed_url)
+                    
+                    if child_data is not None:
+                        logger.debug("Successfully retrieved VPC child data for peerOneId: %s", peer_one_id)
+                        
+                        # Filter child data to only keep int_vpc_peer_link_po policy interfaces
+                        filtered_child_data = self._filter_vpc_peer_link_interfaces(child_data)
+                        
+                        # Store the filtered child data with VPC pair context
+                        endpoint_dict[child_name].append({
+                            "data": filtered_child_data,
+                            "endpoint": processed_url,
+                            "vpc_pair_context": {
+                                "peerOneId": peer_one_id,
+                                "peerTwoId": peer_two_id,
+                                "peerOneName": vpc_pair.get("peerOneName"),
+                                "peerTwoName": vpc_pair.get("peerTwoName"),
+                                "useVirtualPeerlink": vpc_pair.get("useVirtualPeerlink"),
+                            },
+                            "total_interfaces_received": len(child_data) if isinstance(child_data, list) else 1,
+                            "filtered_interfaces_count": len(filtered_child_data) if isinstance(filtered_child_data, list) else 1,
+                        })
+                        
+                        logger.info("Added VPC child data for VPC pair: %s-%s", 
+                                  vpc_pair.get("peerOneName", peer_one_id), 
+                                  vpc_pair.get("peerTwoName", peer_two_id))
+                    else:
+                        logger.warning("Failed to fetch VPC child data for peerOneId: %s", peer_one_id)
+                
+                except Exception as e:
+                    logger.error("Error fetching VPC child data for peerOneId %s: %s", peer_one_id, str(e))
+
+    def _extract_vpc_domains_from_switches(self, discovered_switches_data):
+        """
+        Extract VPC domain IDs from Discovered_Switches data.
+        According to YAML spec: if vpcDomain > 0, then vPC is configured.
+
+        Parameters:
+            discovered_switches_data (list): List of Discovered_Switches data entries.
+
+        Returns:
+            dict: Dictionary mapping serial numbers to their VPC domain IDs.
+        """
+        vpc_domains = {}
+
+        logger.debug(
+            "Extracting VPC domains from %d Discovered_Switches entries",
+            len(discovered_switches_data),
+        )
+
+        for entry in discovered_switches_data:
+            if not isinstance(entry, dict) or "data" not in entry:
+                logger.warning("Invalid Discovered_Switches entry format: %s", entry)
+                continue
+
+            switches_data = entry["data"]
+
+            # Handle different data structures
+            if isinstance(switches_data, list):
+                switches_list = switches_data
+            elif isinstance(switches_data, dict) and "data" in switches_data:
+                switches_list = switches_data["data"]
+            elif isinstance(switches_data, dict):
+                switches_list = [switches_data]
+            else:
+                logger.warning(
+                    "Unexpected switches data format: %s", type(switches_data)
+                )
+                continue
+
+            # Extract VPC domains from each switch
+            for switch in switches_list:
+                if isinstance(switch, dict):
+                    serial_number = switch.get("serialNumber")
+                    vpc_domain = switch.get("vpcDomain")
+                    
+                    if serial_number and vpc_domain is not None:
+                        try:
+                            vpc_domain_int = int(vpc_domain)
+                            if vpc_domain_int > 0:
+                                vpc_domains[serial_number] = vpc_domain_int
+                                logger.debug("Found VPC domain %d for switch %s", vpc_domain_int, serial_number)
+                        except (ValueError, TypeError):
+                            logger.debug("Invalid VPC domain value for switch %s: %s", serial_number, vpc_domain)
+
+        logger.info(
+            "Extracted VPC domains for %d switches",
+            len(vpc_domains),
+        )
+        return vpc_domains
+
+    def _filter_vpc_peer_link_interfaces(self, vpc_interface_data):
+        """
+        Filter VPC interface data to only include interfaces with policy "int_vpc_peer_link_po".
+        
+        Parameters:
+            vpc_interface_data (dict or list): Raw VPC interface data from NDFC API.
+            
+        Returns:
+            list: Filtered list of interface policy objects containing only int_vpc_peer_link_po policies.
+        """
+        logger.debug("Filtering VPC interface data for int_vpc_peer_link_po policies")
+
+        # Normalize incoming data into a list of items
+        items = []
+        if isinstance(vpc_interface_data, list):
+            items = vpc_interface_data
+        elif isinstance(vpc_interface_data, dict):
+            if "data" in vpc_interface_data and isinstance(vpc_interface_data["data"], list):
+                items = vpc_interface_data["data"]
+            elif "response" in vpc_interface_data and isinstance(vpc_interface_data["response"], list):
+                items = vpc_interface_data["response"]
+            else:
+                # Single object; treat as one item
+                items = [vpc_interface_data]
+        else:
+            logger.warning("Unexpected VPC interface data format: %s", type(vpc_interface_data))
+            return []
+
+        filtered_interfaces = []
+
+        logger.debug("Processing %d interface policy items for VPC peer link filtering", len(items))
+
+        for item in items:
+            if isinstance(item, dict) and "policy" in item:
+                policy_name = item.get("policy")
+                if policy_name == "int_vpc_peer_link_po":
+                    filtered_interfaces.append(item)
+                    logger.debug(
+                        "Including VPC peer link policy interfaces: %s",
+                        policy_name,
+                    )
+                else:
+                    logger.debug(
+                        "Excluding non-peer-link policy interfaces: %s",
+                        policy_name,
+                    )
+            else:
+                logger.debug("Interface item missing policy field: %s", item)
+
+        logger.info(
+            "VPC peer link filtering results: %d policy items matched out of %d total items",
+            len(filtered_interfaces),
+            len(items),
+        )
+
+        return filtered_interfaces

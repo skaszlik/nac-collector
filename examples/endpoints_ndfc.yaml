@@ -1,11 +1,47 @@
 # NDFC (Nexus Dashboard Fabric Controller) API Endpoints
 # This file contains sample endpoints for collecting configuration data from NDFC
 
-# Fabric configuration (Note: FABRIC_NAME will be replaced by fabric_name parameter)
+# Fabric configuration (Note: %v will be replaced by fabric_name parameter)
 - name: Fabric_Configuration
-  endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/control/fabrics/FABRIC_NAME
+  endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/control/fabrics/%v
 
+# Workflow for collecting policies bound to switches in a fabric:
 
-# NOTE: Some endpoints may require fabric-specific names
-# Replace FABRIC_NAME with your actual fabric name or implement
-# dynamic fabric name resolution in the client code
+# Get all switches discovered in the fabric
+- name: Discovered_Switches
+  endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/control/fabrics/%v/inventory
+
+# "vtep_vip" -> this field can not be mapped (no API endpoint available)
+
+# GET VPC CONFIGURATION.
+# 1. Get all VPC pairs (all fabrics) then filter by discovered switch serial numbers (if peerOneId is in discovered switches, include the VPC pair)
+- name: VPC_Pairs
+  endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/vpcpair
+  children:
+  # 2. For each VPC pair, get the combined serial number of vPC Pair
+  - name: VPC_Combined_Serial_Number
+    endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/interface/vpcpair_serial_number?serial_number={{peerOneId}}
+
+  # 3. For each VPC pair, get policies bound to the VPC pair filtering by the combined serial number
+  - name: VPC_Combined_Serial_Number
+    endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/interface
+
+# Get all policies in the fabric (will be filtered by discovered switch serial numbers)
+# Note: All policies are fetched and then filtered client-side based on discovered switch serial numbers
+
+- name: Policies
+  endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/control/policies
+
+# VRF configuration
+- name: VRF_Configuration
+  endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/%v/vrfs
+  children:
+  - name: VRF_Attachments
+    endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/%v/vrfs/attachments?vrf-names={{vrf_name}}
+
+# Network configuration
+- name: Network_Configuration
+  endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/%v/networks
+  children:
+  - name: Network_Attachments
+    endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/%v/networks/{{network_name}}/attachments

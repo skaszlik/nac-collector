@@ -60,22 +60,7 @@ nac-collector -s NDFC
 | `--url` | `-url` | Yes | - | NDFC base URL (or set NAC_URL env var) |
 | `--domain` | `-d` | No | "local" | NDFC authentication domain (or set NAC_DOMAIN env var) |
 | `--endpoints-file` | `-e` | No | endpoints_ndfc.yaml | Path to endpoints YAML file |
-| `--output` | `-o` | No | ndfc.json | Output JSON file path |
+| `--output` | `-o` | No | - | Not used for NDFC (data saved to fabric-specific file) |
 | `--verbosity` | `-v` | No | WARNING | Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL) |
 
-### Programmatic Usage
-
-```python
-from nac_collector.cisco_client_ndfc import CiscoClientNDFC
-
-# Create client instance with custom domain
-client = CiscoClientNDFC(
-    username="admin",
-    password="password",
-    base_url="https://ndfc.example.com",
-    domain="CustomDomain",  # Specify your NDFC domain
-    max_retries=3,
-    retry_after=5,
-    timeout=30,
-    ssl_verify=False
-)
+**Note**: For NDFC, data is automatically saved to `nac_collector/resources/NDFC_{FABRIC_NAME}_fabric_settings.json` instead of a general output file.
