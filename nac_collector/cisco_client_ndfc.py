@@ -22,6 +22,7 @@ class CiscoClientNDFC(CiscoClient):
 
     NDFC_AUTH_ENDPOINT = "/login"
     SOLUTION = "ndfc"
+    POLICYS_TEMPLATE_NAMES_TO_EXCLUDE = ["Default_VRF_Universal", "Default_Network_Universal", "NA", "Default_VRF_Extension_Universal", "Default_Network_Extension_Universal "]
 
     def __init__(
         self,
@@ -340,6 +341,14 @@ class CiscoClientNDFC(CiscoClient):
                 )
                 self._process_vpc_pairs_endpoint_with_filtering(endpoint, endpoint_dict)
                 continue
+
+            # Skip VPC children endpoints as they are processed as embedded data in VPC_Pairs
+            if self._is_vpc_child_endpoint(endpoint_name):
+                logger.info(
+                    "Skipping VPC child endpoint %s - interface data will be embedded in VPC_Pairs",
+                    endpoint_name
+                )
+                continue
             
             # Initialize list for this endpoint if not exists
             if endpoint_name not in endpoint_dict:
@@ -495,8 +504,7 @@ class CiscoClientNDFC(CiscoClient):
 
                 #Filter out policies that are based on templates: 'Default_VRF_Universal' or 'Default_Network_Universal' 
                 filtered_policies = self._filter_specyfic_template_policies(
-                    filtered_policies,
-                    ["Default_VRF_Universal", "Default_Network_Universal", "NA"]
+                    filtered_policies, self.POLICYS_TEMPLATE_NAMES_TO_EXCLUDE
                 ) 
 
                 # Store the filtered results
@@ -617,7 +625,12 @@ class CiscoClientNDFC(CiscoClient):
                 # Enrich filtered VPC pairs with VPC domain information
                 self._enrich_vpc_pairs_with_domain_info(filtered_vpc_pairs, endpoint_dict)
 
-                # Store the filtered results
+                # Handle children endpoints for VPC pairs and embed the interface data
+                if endpoint.get("children"):
+                    logger.info("Processing children endpoints for %s and embedding interface data", endpoint_name)
+                    self._embed_vpc_interfaces_data(endpoint, filtered_vpc_pairs)
+
+                # Store the filtered results with embedded interface data
                 endpoint_dict[endpoint_name].append(
                     {
                         "data": filtered_vpc_pairs,
@@ -633,7 +646,7 @@ class CiscoClientNDFC(CiscoClient):
                 )
 
                 logger.info(
-                    "VPC pairs filtering completed: %d VPC pairs filtered from %d total pairs for %d switches",
+                    "VPC pairs processing completed: %d VPC pairs filtered from %d total pairs for %d switches",
                     len(filtered_vpc_pairs)
                     if isinstance(filtered_vpc_pairs, list)
                     else 1,
@@ -642,11 +655,6 @@ class CiscoClientNDFC(CiscoClient):
                     else 1,
                     len(serial_numbers),
                 )
-
-                # Handle children endpoints for VPC pairs (VPC_Combined_Serial_Number)
-                if endpoint.get("children"):
-                    logger.info("Processing children endpoints for %s", endpoint_name)
-                    self._process_vpc_children_endpoints(endpoint, endpoint_dict, filtered_vpc_pairs)
 
             else:
                 logger.error("Failed to fetch VPC pairs data")
@@ -1357,6 +1365,159 @@ class CiscoClientNDFC(CiscoClient):
             logger.warning("Unexpected attachment data type: %s", type(attachment_data))
             return []
 
+    def _is_vpc_child_endpoint(self, endpoint_name):
+        """
+        Check if the given endpoint is a VPC child endpoint that should be embedded
+        in VPC_Pairs instead of processed separately.
+
+        Parameters:
+            endpoint_name (str): The name of the endpoint to check.
+
+        Returns:
+            bool: True if this is a VPC child endpoint, False otherwise.
+        """
+        vpc_child_endpoints = ["VPC_Combined_Serial_Number"]
+        return endpoint_name in vpc_child_endpoints
+
+    def _embed_vpc_interfaces_data(self, parent_endpoint, filtered_vpc_pairs):
+        """
+        Embed interface data directly into each VPC pair under 'interfaces_data' key.
+        This replaces the separate VPC_Combined_Serial_Number endpoint processing.
+        Uses the specific vpcpair_serial_number endpoint to get interfaces for each VPC pair.
+
+        Parameters:
+            parent_endpoint (dict): The parent VPC_Pairs endpoint.
+            filtered_vpc_pairs (list): List of filtered VPC pairs to enrich with interface data.
+        """
+        # Get the children endpoint configuration
+        children_endpoints = parent_endpoint.get("children", [])
+        
+        # Find the VPC Combined Serial Number endpoint with peerOneId parameter
+        vpc_serial_endpoint = None
+        vpc_interface_endpoint = None
+        
+        for child_endpoint in children_endpoints:
+            child_name = child_endpoint["name"]
+            child_url = child_endpoint["endpoint"]
+            
+            if child_name == "VPC_Combined_Serial_Number":
+                if "{{peerOneId}}" in child_url:
+                    vpc_serial_endpoint = child_endpoint
+                    logger.debug("Found VPC serial endpoint: %s", child_url)
+                elif "/interface" in child_url and "vpcpair_serial_number" not in child_url:
+                    vpc_interface_endpoint = child_endpoint
+                    logger.debug("Found VPC interface endpoint: %s", child_url)
+        
+        if not vpc_serial_endpoint and not vpc_interface_endpoint:
+            logger.warning("No VPC Combined Serial Number endpoints found in children")
+            return
+        
+        # Process each VPC pair and embed interface data
+        for vpc_pair in filtered_vpc_pairs:
+            if not isinstance(vpc_pair, dict):
+                continue
+            
+            peer_one_id = vpc_pair.get("peerOneId")
+            peer_two_id = vpc_pair.get("peerTwoId")
+            
+            if not peer_one_id:
+                logger.debug("Skipping VPC pair without peerOneId: %s", vpc_pair)
+                continue
+            
+            # Initialize interfaces_data list for this VPC pair
+            vpc_pair["interfaces_data"] = []
+            
+            logger.info("Processing VPC pair: %s-%s (peerOneId: %s)", 
+                      vpc_pair.get("peerOneName", peer_one_id), 
+                      vpc_pair.get("peerTwoName", peer_two_id),
+                      peer_one_id)
+            
+            # First try the specific vpcpair_serial_number endpoint
+            if vpc_serial_endpoint:
+                try:
+                    processed_url = vpc_serial_endpoint["endpoint"]
+                    if self.fabric_name and "%v" in processed_url:
+                        processed_url = processed_url.replace("%v", self.fabric_name)
+                    
+                    if "{{peerOneId}}" in processed_url:
+                        processed_url = processed_url.replace("{{peerOneId}}", peer_one_id)
+                    
+                    logger.debug("Fetching VPC interface data from serial endpoint: %s", processed_url)
+                    
+                    interface_data = self.fetch_data(processed_url)
+                    
+                    if interface_data is not None:
+                        logger.debug("Successfully retrieved VPC interface data for peerOneId: %s", peer_one_id)
+                        
+                        # Filter interface data to only keep int_vpc_peer_link_po policy interfaces
+                        filtered_interface_data = self._filter_vpc_peer_link_interfaces(interface_data)
+                        
+                        # Add the filtered interface data to the VPC pair
+                        if filtered_interface_data:
+                            vpc_pair["interfaces_data"].extend(filtered_interface_data)
+                            
+                        logger.info("Embedded interface data for VPC pair: %s-%s (%d interfaces from serial endpoint)", 
+                                  vpc_pair.get("peerOneName", peer_one_id), 
+                                  vpc_pair.get("peerTwoName", peer_two_id),
+                                  len(filtered_interface_data) if isinstance(filtered_interface_data, list) else 1)
+                    else:
+                        logger.warning("Failed to fetch VPC interface data from serial endpoint for peerOneId: %s", peer_one_id)
+                
+                except Exception as e:
+                    logger.error("Error fetching VPC interface data from serial endpoint for peerOneId %s: %s", peer_one_id, str(e))
+            
+            # If no data from serial endpoint or serial endpoint failed, try the generic interface endpoint
+            if not vpc_pair["interfaces_data"] and vpc_interface_endpoint:
+                try:
+                    processed_url = vpc_interface_endpoint["endpoint"]
+                    if self.fabric_name and "%v" in processed_url:
+                        processed_url = processed_url.replace("%v", self.fabric_name)
+                    
+                    logger.debug("Fetching VPC interface data from generic endpoint: %s", processed_url)
+                    
+                    interface_data = self.fetch_data(processed_url)
+                    
+                    if interface_data is not None:
+                        logger.debug("Successfully retrieved VPC interface data from generic endpoint")
+                        
+                        # Filter interface data to only keep int_vpc_peer_link_po policy interfaces
+                        # and also filter by the specific VPC pair serial numbers
+                        filtered_interface_data = self._filter_vpc_peer_link_interfaces(interface_data)
+                        
+                        # Further filter to only include interfaces that match this VPC pair's serial numbers
+                        vpc_filtered_data = []
+                        for interface_group in filtered_interface_data:
+                            if isinstance(interface_group, dict) and "interfaces" in interface_group:
+                                matching_interfaces = []
+                                for interface in interface_group["interfaces"]:
+                                    interface_serial = interface.get("serialNumber")
+                                    if interface_serial in [peer_one_id, peer_two_id]:
+                                        matching_interfaces.append(interface)
+                                
+                                if matching_interfaces:
+                                    filtered_group = interface_group.copy()
+                                    filtered_group["interfaces"] = matching_interfaces
+                                    vpc_filtered_data.append(filtered_group)
+                        
+                        # Add the filtered interface data to the VPC pair
+                        if vpc_filtered_data:
+                            vpc_pair["interfaces_data"].extend(vpc_filtered_data)
+                            
+                        logger.info("Embedded interface data for VPC pair: %s-%s (%d interfaces from generic endpoint)", 
+                                  vpc_pair.get("peerOneName", peer_one_id), 
+                                  vpc_pair.get("peerTwoName", peer_two_id),
+                                  len(vpc_filtered_data) if isinstance(vpc_filtered_data, list) else 1)
+                    else:
+                        logger.warning("Failed to fetch VPC interface data from generic endpoint")
+                
+                except Exception as e:
+                    logger.error("Error fetching VPC interface data from generic endpoint: %s", str(e))
+            
+            if not vpc_pair["interfaces_data"]:
+                logger.warning("No interface data found for VPC pair: %s-%s", 
+                             vpc_pair.get("peerOneName", peer_one_id), 
+                             vpc_pair.get("peerTwoName", peer_two_id))
+
     def _process_vpc_children_endpoints(self, parent_endpoint, endpoint_dict, filtered_vpc_pairs):
         """
         Process VPC children endpoints for VPC_Pairs.
@@ -1532,7 +1693,7 @@ class CiscoClientNDFC(CiscoClient):
         for item in items:
             if isinstance(item, dict) and "policy" in item:
                 policy_name = item.get("policy")
-                if policy_name == "int_vpc_peer_link_po":
+                if policy_name and "peer_link_po" in policy_name:
                     filtered_interfaces.append(item)
                     logger.debug(
                         "Including VPC peer link policy interfaces: %s",

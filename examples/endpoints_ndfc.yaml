@@ -26,9 +26,9 @@
   - name: VPC_Combined_Serial_Number
     endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/interface
 
+
 # Get all policies in the fabric (will be filtered by discovered switch serial numbers)
 # Note: All policies are fetched and then filtered client-side based on discovered switch serial numbers
-
 - name: Policies
   endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/control/policies
 
