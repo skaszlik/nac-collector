@@ -1,6 +1,5 @@
 import concurrent.futures
 import datetime
-import json
 import logging
 import os
 import threading
@@ -17,6 +16,7 @@ from rich.progress import (
 from tinydb import Query, TinyDB
 
 from nac_collector.cisco_client import CiscoClient
+from nac_collector.resource_manager import ResourceManager
 
 logger = logging.getLogger("main")
 
@@ -29,9 +29,6 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
     authentication for subsequent requests.
     """
 
-    LOOKUP_FILE = os.path.join(
-        os.path.dirname(__file__), "resources/catalystcenter_lookups.json"
-    )
     DNAC_AUTH_ENDPOINT = "/dna/system/api/v1/auth/token"
     SOLUTION = "catalystcenter"
     SKIP_TMPS = os.environ.get("NAC_SKIP_TMP", "").lower()
@@ -50,13 +47,29 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
         "role": "roles",
     }
 
-    """
-    Lookups are essential because some endpoint IDs required in Catalyst Center do not follow simple child URL patterns.
-    Instead, they have a fixed structure that cannot be inferred directly from the provider file.
-    As a result, a lookup file is necessary to retrieve the correct IDs.
-    """
-    with open(LOOKUP_FILE) as json_file:
-        id_lookup = json.load(json_file)
+    # Load ID lookup data using ResourceManager
+    # Lookups are essential because some endpoint IDs required in Catalyst Center do not follow simple child URL patterns.
+    # Instead, they have a fixed structure that cannot be inferred directly from the provider file.
+    # As a result, a lookup file is necessary to retrieve the correct IDs.
+    @staticmethod
+    def _load_id_lookup() -> dict[str, Any]:
+        """Load and convert the YAML list format to dictionary format for internal use."""
+        yaml_data = ResourceManager.get_packaged_lookup_content("catalystcenter")
+        if not yaml_data or not isinstance(yaml_data, list):
+            return {}
+
+        # Convert list format to dictionary format for internal use
+        lookup_dict: dict[str, Any] = {}
+        for entry in yaml_data:
+            if isinstance(entry, dict) and "endpoint" in entry:
+                endpoint_key = entry["endpoint"]
+                # Create lookup entry without the 'endpoint' key
+                lookup_entry = {k: v for k, v in entry.items() if k != "endpoint"}
+                lookup_dict[endpoint_key] = lookup_entry
+
+        return lookup_dict
+
+    id_lookup = _load_id_lookup()
 
     def __init__(
         self,
@@ -159,8 +172,9 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
         Returns:
             dict: The updated endpoint dictionary with processed data.
         """
-        if endpoint.get("endpoint") in self.id_lookup:
-            new_endpoint = self.id_lookup[endpoint.get("endpoint")]["target_endpoint"]
+        endpoint_key = endpoint.get("endpoint")
+        if endpoint_key and endpoint_key in self.id_lookup:
+            new_endpoint = self.id_lookup[endpoint_key]["target_endpoint"]
         else:
             new_endpoint = endpoint["endpoint"]
 
@@ -223,8 +237,12 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
             dict: The dictionary containing the data retrieved from the alternate endpoint.
         """
 
+        endpoint_key = endpoint.get("endpoint")
+        if not endpoint_key or endpoint_key not in self.id_lookup:
+            return None
+
         id_lookup_data = self.fetch_data_pagination(
-            self.id_lookup[endpoint.get("endpoint")]["source_endpoint"]
+            self.id_lookup[endpoint_key]["source_endpoint"]
         )
         if id_lookup_data is None:
             return None
@@ -254,21 +272,17 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
             id_list = []
         data_list = []
         for id_ in id_list:
-            lookup_endpoint = self.id_lookup[endpoint.get("endpoint")][
-                "target_endpoint"
-            ].replace("%v", id_)
+            lookup_endpoint = self.id_lookup[endpoint_key]["target_endpoint"].replace(
+                "%v", id_
+            )
             data = self.fetch_data_pagination(lookup_endpoint)
             if isinstance(data, dict) and data.get("response"):
                 data = data["response"]
             if isinstance(data, dict):
-                data[
-                    self.id_lookup[endpoint.get("endpoint")].get("target_key", "id")
-                ] = id_
+                data[self.id_lookup[endpoint_key].get("target_key", "id")] = id_
             elif isinstance(data, list):
                 data = {
-                    self.id_lookup[endpoint.get("endpoint")].get(
-                        "target_key", "id"
-                    ): id_,
+                    self.id_lookup[endpoint_key].get("target_key", "id"): id_,
                     "data": data,
                 }
             data_list.append(data)
@@ -351,10 +365,11 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
         logger.info("Processing endpoint: %s", endpoint["name"])
 
         endpoint_dict = CiscoClient.create_endpoint_dict(endpoint)
-        if endpoint.get("endpoint") in self.id_lookup:
+        endpoint_key = endpoint.get("endpoint")
+        if endpoint_key and endpoint_key in self.id_lookup:
             logger.info(
                 "Alternate endpoint found: %s",
-                self.id_lookup[endpoint.get("endpoint")]["source_endpoint"],
+                self.id_lookup[endpoint_key]["source_endpoint"],
             )
             data = self.fetch_data_alternate(endpoint)
             if data is None:

@@ -3,6 +3,9 @@
 import logging
 from importlib import resources
 from pathlib import Path
+from typing import Any
+
+from ruamel.yaml import YAML
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +28,7 @@ class ResourceManager:
             # Import the endpoints resource package
             from nac_collector.resources import endpoints
 
-            filename = f"endpoints_{solution.lower()}.yaml"
+            filename = f"{solution.lower()}.yaml"
 
             # Use importlib.resources to check if the file exists
             if resources.is_resource(endpoints, filename):
@@ -55,7 +58,7 @@ class ResourceManager:
         try:
             from nac_collector.resources import endpoints
 
-            filename = f"endpoints_{solution.lower()}.yaml"
+            filename = f"{solution.lower()}.yaml"
 
             if resources.is_resource(endpoints, filename):
                 content = resources.read_text(endpoints, filename)
@@ -67,6 +70,38 @@ class ResourceManager:
 
         except (ImportError, AttributeError, FileNotFoundError) as e:
             logger.debug("Failed to read packaged endpoint content: %s", e)
+            return None
+
+    @staticmethod
+    def get_packaged_lookup_content(solution: str) -> dict[str, Any] | list[Any] | None:
+        """
+        Get content of a packaged lookup YAML file from the lookups subdirectory.
+
+        Args:
+            solution: The solution name (e.g., 'catalystcenter', 'ise', etc.)
+
+        Returns:
+            Parsed YAML content as dict or list if file exists, None otherwise.
+        """
+        try:
+            # Import the lookups resource package
+            from nac_collector.resources import lookups
+
+            filename = f"{solution.lower()}.yaml"
+
+            if resources.is_resource(lookups, filename):
+                content = resources.read_text(lookups, filename)
+                logger.debug("Read packaged lookup content for: %s", solution)
+
+                yaml = YAML(typ="safe")
+                parsed_content: dict[str, Any] = yaml.load(content)
+                return parsed_content
+            else:
+                logger.debug("Packaged lookup file not found: %s", filename)
+                return None
+
+        except (ImportError, AttributeError, FileNotFoundError, Exception) as e:
+            logger.debug("Failed to read packaged lookup content: %s", e)
             return None
 
     @staticmethod
@@ -84,13 +119,11 @@ class ResourceManager:
 
             # Get all files in the endpoints resource package
             for resource_name in resources.contents(endpoints):
-                if resource_name.startswith("endpoints_") and resource_name.endswith(
-                    ".yaml"
+                if resource_name.endswith(".yaml") and not resource_name.startswith(
+                    "_"
                 ):
                     # Extract solution name from filename
-                    solution = resource_name[
-                        10:-5
-                    ]  # Remove "endpoints_" prefix and ".yaml" suffix
+                    solution = resource_name[:-5]  # Remove ".yaml" suffix
                     available_solutions.append(solution)
 
             logger.debug("Available packaged solutions: %s", available_solutions)
