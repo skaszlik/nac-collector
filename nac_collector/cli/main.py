@@ -88,7 +88,7 @@ def main(
             "-u",
             "--username",
             envvar="NAC_USERNAME",
-            help="Username for authentication. Can also be set using the NAC_USERNAME environment variable",
+            help="Username for authentication",
         ),
     ],
     password: Annotated[
@@ -97,7 +97,7 @@ def main(
             "-p",
             "--password",
             envvar="NAC_PASSWORD",
-            help="Password for authentication. Can also be set using the NAC_PASSWORD environment variable",
+            help="Password for authentication",
         ),
     ],
     url: Annotated[
@@ -105,21 +105,19 @@ def main(
         typer.Option(
             "--url",
             envvar="NAC_URL",
-            help="Base URL for the service. Can also be set using the NAC_URL environment variable",
+            help="Base URL for the service",
         ),
     ],
     verbosity: Annotated[
         LogLevel,
-        typer.Option(
-            "-v", "--verbosity", help="Either CRITICAL, ERROR, WARNING, INFO or DEBUG"
-        ),
+        typer.Option("-v", "--verbosity", help="Log level"),
     ] = LogLevel.WARNING,
     git_provider: Annotated[
         bool,
         typer.Option(
             "-g",
             "--git-provider",
-            help="Generate endpoint.yaml automatically using provider github repo",
+            help="Generate endpoint.yaml automatically from provider GitHub repo",
         ),
     ] = False,
     endpoints_file: Annotated[
@@ -128,18 +126,16 @@ def main(
     ] = None,
     timeout: Annotated[
         int,
-        typer.Option(
-            "-t", "--timeout", help=f"Request timeout in seconds. Default is {TIMEOUT}."
-        ),
+        typer.Option("-t", "--timeout", help="Request timeout in seconds"),
     ] = TIMEOUT,
     output: Annotated[
         str | None,
-        typer.Option("-o", "--output", help="Path to the output json file"),
+        typer.Option("-o", "--output", help="Path to the output JSON file"),
     ] = None,
     version: Annotated[
         bool | None,
         typer.Option(
-            "--version", callback=version_callback, help="Show the version and exit."
+            "--version", callback=version_callback, help="Show version and exit"
         ),
     ] = None,
 ) -> None:
