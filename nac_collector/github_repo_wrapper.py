@@ -94,7 +94,7 @@ class GithubRepoWrapper:
                 for file in files_bar:
                     # Exclude *_update_rank used in ISE from inspecting
                     if file.endswith(".yaml") and not file.endswith("update_rank.yaml"):
-                        with open(os.path.join(root, file), "r", encoding="utf-8") as f:
+                        with open(os.path.join(root, file), encoding="utf-8") as f:
                             data = self.yaml.load(f)
                             if data.get("no_read") is not None and data.get("no_read"):
                                 continue

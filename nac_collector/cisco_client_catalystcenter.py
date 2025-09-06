@@ -1,18 +1,18 @@
+import concurrent.futures
+import datetime
+import json
 import logging
+import os
+import threading
 
 import click
 import requests
-import datetime
 import urllib3
-import json
-import os
-import concurrent.futures
-from tinydb import TinyDB, Query
-
-from urllib3.util.retry import Retry
 from requests.adapters import HTTPAdapter
+from tinydb import Query, TinyDB
+from urllib3.util.retry import Retry
+
 from nac_collector.cisco_client import CiscoClient
-import threading
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 logger = logging.getLogger("main")
@@ -51,11 +51,11 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
     }
 
     """
-    Lookups are essential because some endpoint IDs required in Catalyst Center do not follow simple child URL patterns. 
-    Instead, they have a fixed structure that cannot be inferred directly from the provider file. 
+    Lookups are essential because some endpoint IDs required in Catalyst Center do not follow simple child URL patterns.
+    Instead, they have a fixed structure that cannot be inferred directly from the provider file.
     As a result, a lookup file is necessary to retrieve the correct IDs.
     """
-    with open(LOOKUP_FILE, "r") as json_file:
+    with open(LOOKUP_FILE) as json_file:
         id_lookup = json.load(json_file)
 
     def __init__(
@@ -269,7 +269,7 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
 
         # Load endpoints from the YAML file
         logger.info("Loading endpoints from %s", endpoints_yaml_file)
-        with open(endpoints_yaml_file, "r", encoding="utf-8") as f:
+        with open(endpoints_yaml_file, encoding="utf-8") as f:
             endpoints = self.yaml.load(f)
         # Initialize an empty dictionary
         final_dict = {}
@@ -351,7 +351,7 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
                 Runs sequentially for the given child, but in parallel
                 with other children.
                 """
-                log_msg = "%s/%%v%s" % (
+                log_msg = "{}/%v{}".format(
                     endpoint["endpoint"],
                     children_endpoint["endpoint"],
                 )
@@ -374,7 +374,7 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
                     if len(child_dict.get(children_endpoint["name"], [])) > 0:
                         child_dict[children_endpoint["name"]][0]["id"] = parent_id
                     with lock:
-                        for idx, entry in enumerate(endpoint_dict[endpoint["name"]]):
+                        for _idx, entry in enumerate(endpoint_dict[endpoint["name"]]):
                             if isinstance(entry.get("data"), list):
                                 for _ in entry["data"]:
                                     current = entry.setdefault("children", {}).get(

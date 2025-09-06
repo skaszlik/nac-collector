@@ -32,7 +32,7 @@ def test_authenticate_success(mocker, cisco_client):
 
 def test_authenticate_failure(mocker, cisco_client):
     mock_response = Mock()
-    mock_response.status_code != 200
+    mock_response.status_code = 401
     mocker.patch("requests.get", return_value=mock_response)
 
     result = cisco_client.authenticate()

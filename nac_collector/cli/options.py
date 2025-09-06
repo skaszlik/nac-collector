@@ -1,4 +1,5 @@
 import click
+
 from nac_collector.constants import TIMEOUT
 
 solution = click.option(

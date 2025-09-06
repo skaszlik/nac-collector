@@ -1,15 +1,15 @@
 import logging
+import os
 import sys
 import time
-import os
 
 import click
 import errorhandler
 
 import nac_collector
+from nac_collector.cisco_client_catalystcenter import CiscoClientCATALYSTCENTER
 from nac_collector.cisco_client_fmc import CiscoClientFMC
 from nac_collector.cisco_client_ise import CiscoClientISE
-from nac_collector.cisco_client_catalystcenter import CiscoClientCATALYSTCENTER
 from nac_collector.cisco_client_ndo import CiscoClientNDO
 from nac_collector.cisco_client_sdwan import CiscoClientSDWAN
 from nac_collector.constants import GIT_TMP, MAX_RETRIES, RETRY_AFTER
@@ -43,7 +43,7 @@ def configure_logging(level: str) -> None:
     error_handler.reset()
 
 
-@click.command(context_settings=dict(help_option_names=["-h", "--help"]))
+@click.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.version_option(nac_collector.__version__)
 @click.option(
     "-v",

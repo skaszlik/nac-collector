@@ -151,7 +151,7 @@ class CiscoClientISE(CiscoClient):
 
         # Load endpoints from the YAML file
         logger.info("Loading endpoints from %s", endpoints_yaml_file)
-        with open(endpoints_yaml_file, "r", encoding="utf-8") as f:
+        with open(endpoints_yaml_file, encoding="utf-8") as f:
             endpoints = self.yaml.load(f)
 
         # Initialize an empty dictionary

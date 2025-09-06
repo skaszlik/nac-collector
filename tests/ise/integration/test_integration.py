@@ -102,9 +102,7 @@ def test_cisco_client_ise_with_integration(cisco_client, tmpdir):
 
         # Compare the content of ise.json with expected data
         expected_json_file = "tests/ise/integration/fixtures/ise.json"
-        with open(expected_json_file, "r") as f_expected, open(
-            str(output_file), "r"
-        ) as f_actual:
+        with open(expected_json_file) as f_expected, open(str(output_file)) as f_actual:
             expected_data = json.load(f_expected)
             actual_data = json.load(f_actual)
 

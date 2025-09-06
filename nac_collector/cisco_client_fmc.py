@@ -1,7 +1,7 @@
-import logging
-
 import copy
 import json
+import logging
+
 import click
 import requests
 import urllib3
@@ -122,7 +122,7 @@ class CiscoClientFMC(CiscoClient):
                 endpoint_dict[endpoint["name"]].append(
                     {
                         "data": i,
-                        "endpoint": f'{endpoint["endpoint"]}/{self.get_id_value(i)}',
+                        "endpoint": f"{endpoint['endpoint']}/{self.get_id_value(i)}",
                     }
                 )
 
@@ -142,7 +142,7 @@ class CiscoClientFMC(CiscoClient):
 
         # Load endpoints from the YAML file
         logger.info("Loading endpoints from %s", endpoints_yaml_file)
-        with open(endpoints_yaml_file, "r", encoding="utf-8") as f:
+        with open(endpoints_yaml_file, encoding="utf-8") as f:
             endpoints = self.yaml.load(f)
 
         # Initialize an empty dictionary

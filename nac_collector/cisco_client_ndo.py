@@ -61,7 +61,7 @@ class CiscoClientNDO(CiscoClient):
 
     def get_from_endpoints(self, endpoints_yaml_file):
         if os.path.isfile(endpoints_yaml_file):
-            with open(endpoints_yaml_file, "r", encoding="utf-8") as f:
+            with open(endpoints_yaml_file, encoding="utf-8") as f:
                 endpoints = self.yaml.load(f)
         else:
             endpoints = [

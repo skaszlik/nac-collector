@@ -1,11 +1,11 @@
-from abc import ABC, abstractmethod
 import json
 import logging
 import time
+from abc import ABC, abstractmethod
 
 import requests
-from ruamel.yaml import YAML
 import urllib3
+from ruamel.yaml import YAML
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
