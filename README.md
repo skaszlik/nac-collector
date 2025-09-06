@@ -1,19 +1,22 @@
-# INSTRUCTION
+[![Tests](https://github.com/netascode/nac-collector/actions/workflows/test.yml/badge.svg)](https://github.com/netascode/nac-collector/actions/workflows/test.yml)
+![Python Support](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-informational "Python Support: 3.10, 3.11, 3.12, 3.13")
+
+# nac-collector
+
+A CLI tool to collect data from network infrastructure devices and systems.
 
 ## Installation
 
-This project uses [Poetry](https://python-poetry.org/) for dependency management.
-
-You can install the project with the following command:
+### Using uv (recommended)
 
 ```bash
-poetry install
+uv tool install git+https://github.com/netascode/nac-collector.git
 ```
 
-Or with pip:
+### Using pip
 
 ```bash
-pip3 install .
+pip install git+https://github.com/netascode/nac-collector.git
 ```
 
 ## Usage
@@ -55,70 +58,44 @@ export NAC_PASSWORD=Cisco123
 export NAC_URL=https://10.1.1.1
 ```
 
-## SDWAN
+## Examples
 
-If you installed with `poetry install` command:
+### SDWAN
 
-- with env variables
+Using uv (development):
 
 ```sh
-poetry run nac-collector -s SDWAN -v DEBUG --git-provider
+# With environment variables
+uv run nac-collector -s SDWAN -v DEBUG --git-provider
+
+# Without environment variables
+uv run nac-collector -s SDWAN --username USERNAME --password PASSWORD --url URL -v DEBUG --git-provider
 ```
 
-- without env variables
+Using installed package:
 
 ```sh
-poetry run nac-collector -s SDWAN --username USERNAME --password PASSWORD --url URL -v DEBUG --git-provider
+nac-collector -s SDWAN -v DEBUG --git-provider
 ```
 
-If you installed the project with pip, you can run the script directly from the command line:
+### ISE
 
 ```sh
-nac-collector -s SDWAN -v --git-provider
-```
-
-## ISE
-
-If you installed with `poetry install` command:
-
-- with env variables
-
-```sh
-poetry run nac-collector -s ISE -v --git-provider
-```
-
-- without env variables
-
-```sh
-poetry run nac-collector -s ISE --username USERNAME --password PASSWORD --url URL -v DEBUG --git-provider
-```
-
-If you installed the project with pip, you can run the script directly from the command line:
-
-```sh
+# With environment variables
 nac-collector -s ISE -v DEBUG --git-provider
+
+# Without environment variables
+nac-collector -s ISE --username USERNAME --password PASSWORD --url URL -v DEBUG --git-provider
 ```
 
-## Catalyst Center
-
-If you installed with `poetry install` command:
-
-- with env variables
+### Catalyst Center
 
 ```sh
-poetry run nac-collector -s CATALYSTCENTER -v DEBUG --git-provider
-```
-
-- without env variables
-
-```sh
-poetry run nac-collector -s CATALYSTCENTER --username USERNAME --password PASSWORD --url URL -v DEBUG --git-provider
-```
-
-If you installed the project with pip, you can run the script directly from the command line:
-
-```sh
+# With environment variables
 nac-collector -s CATALYSTCENTER -v DEBUG --git-provider
+
+# Without environment variables
+nac-collector -s CATALYSTCENTER --username USERNAME --password PASSWORD --url URL -v DEBUG --git-provider
 ```
 
-It contains some custom logic, explained in [README_catalyst_center.md](README_catalyst_center.md)
+Catalyst Center contains some custom logic, explained in [README_catalyst_center.md](README_catalyst_center.md).
