@@ -2,6 +2,7 @@ import json
 import logging
 import time
 from abc import ABC, abstractmethod
+from typing import Any
 
 import requests
 import urllib3
@@ -27,14 +28,14 @@ class CiscoClient(ABC):
 
     def __init__(
         self,
-        username,
-        password,
-        base_url,
-        max_retries,
-        retry_after,
-        timeout,
-        ssl_verify=False,
-    ):
+        username: str,
+        password: str,
+        base_url: str,
+        max_retries: int,
+        retry_after: int,
+        timeout: int,
+        ssl_verify: bool = False,
+    ) -> None:
         self.username = username
         self.password = password
         self.base_url = base_url
@@ -42,13 +43,13 @@ class CiscoClient(ABC):
         self.retry_after = retry_after
         self.timeout = timeout
         self.ssl_verify = ssl_verify
-        self.session = None
+        self.session: requests.Session | None = None
         # Create an instance of the YAML class
         self.yaml = YAML(typ="safe", pure=True)
         self.logger = logging.getLogger(__name__)
 
     @abstractmethod
-    def authenticate(self):
+    def authenticate(self) -> bool:
         """
         Abstract method to authenticate the client using the specified authentication type.
 
@@ -60,7 +61,7 @@ class CiscoClient(ABC):
         """
 
     @abstractmethod
-    def get_from_endpoints(self, endpoints_yaml_file):
+    def get_from_endpoints(self, endpoints_yaml_file: str) -> dict[str, Any]:
         """
         Abstract method to get data from specified endpoints.
 
@@ -76,7 +77,7 @@ class CiscoClient(ABC):
             NotImplementedError: If this method is not overridden in a concrete subclass.
         """
 
-    def get_request(self, url):
+    def get_request(self, url: str) -> requests.Response | None:
         """
         Send a GET request to a specific URL and handle a 429 status code.
 
@@ -90,6 +91,9 @@ class CiscoClient(ABC):
         for _ in range(self.max_retries):
             try:
                 # Send a GET request to the URL
+                if self.session is None:
+                    self.logger.error("Session not initialized")
+                    return None
                 response = self.session.get(
                     url, verify=self.ssl_verify, timeout=self.timeout
                 )
@@ -126,12 +130,12 @@ class CiscoClient(ABC):
                     url,
                     response.status_code,
                 )
-                response = []
+                return None
         # If the status code is 429 after max_retries attempts,
         # or if no successful response was received, return the last response
         return response
 
-    def post_request(self, url, data):
+    def post_request(self, url: str, data: dict[str, Any]) -> requests.Response | None:
         """
         Send a POST request to a specific URL and handle a 429 status code.
 
@@ -145,6 +149,9 @@ class CiscoClient(ABC):
         for _ in range(self.max_retries):
             try:
                 # Send a POST request to the URL
+                if self.session is None:
+                    self.logger.error("Session not initialized")
+                    return None
                 response = self.session.post(
                     url, data=data, verify=self.ssl_verify, timeout=self.timeout
                 )
@@ -180,7 +187,7 @@ class CiscoClient(ABC):
         # or if no successful response was received, return the last response
         return response
 
-    def log_response(self, endpoint, response):
+    def log_response(self, endpoint: str, response: requests.Response) -> None:
         """
         Logs the response from a GET request.
 
@@ -201,7 +208,7 @@ class CiscoClient(ABC):
                 response.status_code,
             )
 
-    def fetch_data_pagination(self, endpoint):
+    def fetch_data_pagination(self, endpoint: str) -> dict[str, Any] | list[Any] | None:
         """
         Fetch all data from a specified endpoint, handling pagination via the "offset" parameter.
 
@@ -272,7 +279,7 @@ class CiscoClient(ABC):
         data = {"response": all_responses} if in_response else all_responses
         return data
 
-    def fetch_data(self, endpoint):
+    def fetch_data(self, endpoint: str) -> dict[str, Any] | None:
         """
         Fetch data from a specified endpoint.
 
@@ -293,7 +300,7 @@ class CiscoClient(ABC):
                     endpoint,
                     response.status_code,
                 )
-                return data
+                return data if isinstance(data, dict) else None
             except ValueError:
                 self.logger.error(
                     "Failed to decode JSON from response for endpoint: %s", endpoint
@@ -303,7 +310,7 @@ class CiscoClient(ABC):
             self.logger.error("No valid response received for endpoint: %s", endpoint)
             return None
 
-    def write_to_json(self, final_dict, output):
+    def write_to_json(self, final_dict: dict[str, Any], output: str) -> None:
         """
         Writes the final dictionary to a JSON file.
 
@@ -316,7 +323,7 @@ class CiscoClient(ABC):
         self.logger.info("Data written to %s", output)
 
     @staticmethod
-    def create_endpoint_dict(endpoint):
+    def create_endpoint_dict(endpoint: dict[str, str]) -> dict[str, list[Any]]:
         """
         Creates a dictionary for a given endpoint.
 

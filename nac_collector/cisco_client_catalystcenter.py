@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import threading
+from typing import Any
 
 import click
 import requests
@@ -36,7 +37,7 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
     SOLUTION = "catalystcenter"
     SKIP_TMPS = os.environ.get("NAC_SKIP_TMP", "").lower()
 
-    global_site_id = None
+    global_site_id: str | None = None
 
     "Used for mapping credentials to the correct endpoint"
     mappings = {
@@ -60,17 +61,17 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
 
     def __init__(
         self,
-        username,
-        password,
-        base_url,
-        max_retries,
-        retry_after,
-        timeout,
-        ssl_verify,
-    ):
+        username: str,
+        password: str,
+        base_url: str,
+        max_retries: int,
+        retry_after: int,
+        timeout: int,
+        ssl_verify: bool,
+    ) -> None:
         self.db = TinyDB("./tmp_db.json")
         self.job = Query()
-        self.start_time = datetime.datetime.now(datetime.UTC).isoformat()
+        self.start_time = datetime.datetime.now().isoformat()
         self.lock = threading.Lock()
         super().__init__(
             username, password, base_url, max_retries, retry_after, timeout, ssl_verify
@@ -88,9 +89,9 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
                 logger.info(
                     "Starting from scratch, removing existing temporary data..."
                 )
-                self.remove(self.job == self.base_url)
+                self.db.remove(self.job == self.base_url)
 
-    def authenticate(self):
+    def authenticate(self) -> bool:
         """
         Perform token-based authentication.
 
@@ -149,7 +150,13 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
         )
         return False
 
-    def process_endpoint_data(self, endpoint, endpoint_dict, data, id_=None):
+    def process_endpoint_data(
+        self,
+        endpoint: dict[str, Any],
+        endpoint_dict: dict[str, Any],
+        data: dict[str, Any] | list[Any] | None,
+        id_: str | None = None,
+    ) -> dict[str, Any]:
         """
         Process the data for a given endpoint and update the endpoint_dict.
 
@@ -176,41 +183,47 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
             endpoint_dict[endpoint["name"]].append(
                 {"data": data, "endpoint": new_endpoint}
             )
-        elif isinstance(data.get("response"), dict):
-            for k, v in data.get("response").items():
-                if (
-                    self.mappings.get(endpoint["name"])
-                    and self.mappings[endpoint["name"]] == k
-                ):
-                    for i in v:
-                        endpoint_dict[endpoint["name"]].append(
-                            {
-                                "data": i,
-                                "endpoint": new_endpoint + "/" + self.get_id_value(i),
-                            }
-                        )
-                else:
-                    elem = {"data": v, "endpoint": new_endpoint, "name": k}
-                    if id_ is not None:
-                        elem["id"] = id_
-                    endpoint_dict[endpoint["name"]].append(elem)
+        elif data and isinstance(data.get("response"), dict):
+            response_data = data.get("response")
+            if response_data:
+                for k, v in response_data.items():
+                    if (
+                        self.mappings.get(endpoint["name"])
+                        and self.mappings[endpoint["name"]] == k
+                    ):
+                        for i in v:
+                            endpoint_dict[endpoint["name"]].append(
+                                {
+                                    "data": i,
+                                    "endpoint": new_endpoint
+                                    + "/"
+                                    + self.get_id_value(i),
+                                }
+                            )
+                    else:
+                        elem = {"data": v, "endpoint": new_endpoint, "name": k}
+                        if id_ is not None:
+                            elem["id"] = id_
+                        endpoint_dict[endpoint["name"]].append(elem)
 
         elif isinstance(data.get("response"), list):
             endpoint_dict[endpoint["name"]].append(
                 {"data": data.get("response"), "endpoint": endpoint["endpoint"]}
             )
-        elif data.get("response"):
-            for i in data.get("response"):
-                endpoint_dict[endpoint["name"]].append(
-                    {
-                        "data": i,
-                        "endpoint": new_endpoint + "/" + self.get_id_value(i),
-                    }
-                )
+        elif data and data.get("response"):
+            response_items = data.get("response")
+            if response_items:
+                for i in response_items:
+                    endpoint_dict[endpoint["name"]].append(
+                        {
+                            "data": i,
+                            "endpoint": new_endpoint + "/" + self.get_id_value(i),
+                        }
+                    )
 
         return endpoint_dict  # Return the processed endpoint dictionary
 
-    def fetch_data_alternate(self, endpoint):
+    def fetch_data_alternate(self, endpoint: dict[str, Any]) -> dict[str, Any] | None:
         """
         Retrieve data from an alternate endpoint if defined in id_lookup.
         Parameters:
@@ -224,14 +237,30 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
         )
         if id_lookup_data is None:
             return None
-        look_data = id_lookup_data["response"]
+        if isinstance(id_lookup_data, dict) and "response" in id_lookup_data:
+            look_data = id_lookup_data["response"]
+        else:
+            return None
         if "/template-programmer/template/version" in endpoint.get(
-            "endpoint"
+            "endpoint", ""
         ):  # bandaid, this endpoint contains ids deeper than usual
-            look_data = [tpl for el in look_data for tpl in el["templates"]]
-        id_list = [
-            i[self.id_lookup[endpoint.get("endpoint")]["source_key"]] for i in look_data
-        ]
+            if isinstance(look_data, list):
+                look_data = [
+                    tpl
+                    for el in look_data
+                    for tpl in el.get("templates", [])
+                    if isinstance(el, dict)
+                ]
+        endpoint_key = endpoint.get("endpoint", "")
+        if endpoint_key in self.id_lookup:
+            source_key = self.id_lookup[endpoint_key]["source_key"]
+            id_list = [
+                i.get(source_key)
+                for i in look_data
+                if isinstance(i, dict) and source_key in i
+            ]
+        else:
+            id_list = []
         data_list = []
         for id_ in id_list:
             lookup_endpoint = self.id_lookup[endpoint.get("endpoint")][
@@ -255,7 +284,7 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
         data = {"response": data_list}
         return data
 
-    def get_from_endpoints(self, endpoints_yaml_file):
+    def get_from_endpoints(self, endpoints_yaml_file: str) -> dict[str, Any]:
         """
         Retrieve data from a list of endpoints specified in a YAML file and
         run GET requests to download data from controller.
@@ -284,7 +313,7 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
             return final_dict
 
     @staticmethod
-    def get_id_value(i):
+    def get_id_value(i: dict[str, Any]) -> str | None:
         """
         Attempts to get the 'id' or 'name' value from a dictionary.
 
@@ -298,10 +327,10 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
         for p in params:
             x = i.get(p)
             if x is not None:
-                return x
+                return str(x)
         return None
 
-    def process_endpoint(self, endpoint):
+    def process_endpoint(self, endpoint: dict[str, Any]) -> dict[str, Any] | None:
         with self.lock:
             existing = self.db.get(
                 (self.job.url == self.base_url)
@@ -309,7 +338,10 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
             )
         if existing and self.SKIP_TMPS != "true":
             logger.info("Got endpoint: %s data from tmp db", endpoint["name"])
-            return existing["content"]
+            content = existing.get("content")
+            if isinstance(content, dict):
+                return content
+            return None
 
         logger.info("Processing endpoint: %s", endpoint["name"])
 
@@ -321,14 +353,24 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
             )
             data = self.fetch_data_alternate(endpoint)
             if data is None:
-                return
+                return None
         else:
-            data = self.fetch_data_pagination(endpoint["endpoint"])
+            fetched_data = self.fetch_data_pagination(endpoint["endpoint"])
+            if isinstance(fetched_data, dict):
+                data = fetched_data
+            else:
+                data = None
 
-        if endpoint["name"] == "site":  # save global site id for other purposes
-            self.global_site_id = [
-                x for x in data["response"] if x["name"] == "Global"
-            ][0]["id"]
+        if (
+            endpoint["name"] == "site" and data and "response" in data
+        ):  # save global site id for other purposes
+            global_sites = [
+                x
+                for x in data["response"]
+                if isinstance(x, dict) and x.get("name") == "Global"
+            ]
+            if global_sites:
+                self.global_site_id = str(global_sites[0].get("id", ""))
 
         endpoint_dict = self.process_endpoint_data(endpoint, endpoint_dict, data)
 
@@ -345,7 +387,7 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
 
             lock = threading.Lock()
 
-            def _process_child(children_endpoint):
+            def _process_child(children_endpoint: dict[str, Any]) -> None:
                 """
                 Process a single children_endpoint for all parent IDs.
                 Runs sequentially for the given child, but in parallel

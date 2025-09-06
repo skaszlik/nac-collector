@@ -1,6 +1,7 @@
 import logging
 import os
 import shutil
+from typing import Any
 
 import click
 from git import Repo
@@ -31,7 +32,7 @@ class GithubRepoWrapper:
                          and saves it to a new YAML file.
     """
 
-    def __init__(self, repo_url, clone_dir, solution):
+    def __init__(self, repo_url: str, clone_dir: str, solution: str) -> None:
         self.repo_url = repo_url
         self.clone_dir = clone_dir
         self.solution = solution
@@ -43,7 +44,7 @@ class GithubRepoWrapper:
         self.yaml.default_flow_style = False  # Use block style
         self.yaml.indent(sequence=2)
 
-    def _clone_repo(self):
+    def _clone_repo(self) -> None:
         # Check if the directory exists and is not empty
         if os.path.exists(self.clone_dir) and os.listdir(self.clone_dir):
             self.logger.debug("Directory exists and is not empty. Deleting directory.")
@@ -63,7 +64,7 @@ class GithubRepoWrapper:
             self.clone_dir,
         )
 
-    def get_definitions(self):
+    def get_definitions(self) -> None:
         """
         This method inspects YAML files in a specific directory, extracts endpoint information,
         and saves it to a new YAML file. It specifically looks for files ending with '.yaml'
@@ -154,7 +155,9 @@ class GithubRepoWrapper:
 
         self._delete_repo()
 
-    def parent_children(self, endpoints_list):
+    def parent_children(
+        self, endpoints_list: list[dict[str, str]]
+    ) -> list[dict[str, Any]]:
         """
         Adjusts the endpoints_list list to include parent-child relationships
         for endpoints containing `%v` and `%s`. It separates the endpoints into parent and
@@ -170,10 +173,10 @@ class GithubRepoWrapper:
         modified_endpoints = []
 
         # Dictionary to hold parents and their children based on paths
-        parent_map = {}
+        parent_map: dict[str, Any] = {}
 
         # Function to split endpoint and register it in the hierarchy
-        def register_endpoint(parts, name):
+        def register_endpoint(parts: list[str], name: str) -> None:
             current_level = parent_map
             base_endpoint = parts[0]
 
@@ -191,7 +194,12 @@ class GithubRepoWrapper:
             # Add the name to the list of names for this segment
             # This is to handle a case where there are two endpoint_data
             # with different name but same endpoint url
-            if name not in current_level["names"]:
+            if "names" not in current_level:
+                current_level["names"] = []
+            if (
+                isinstance(current_level["names"], list)
+                and name not in current_level["names"]
+            ):
                 current_level["names"].append(name)
 
         # Process each endpoint
@@ -225,7 +233,7 @@ class GithubRepoWrapper:
             register_endpoint(parts, name)
 
         # Convert the hierarchical map to a list format
-        def build_hierarchy(node):
+        def build_hierarchy(node: dict[str, Any]) -> list[dict[str, Any]]:
             """
             Recursively build the YAML structure from the hierarchical dictionary.
             """
@@ -244,7 +252,7 @@ class GithubRepoWrapper:
 
         return modified_endpoints
 
-    def _delete_repo(self):
+    def _delete_repo(self) -> None:
         """
         This private method is responsible for deleting the cloned GitHub repository
         from the local machine. It's called after the necessary data has been extracted
@@ -258,7 +266,7 @@ class GithubRepoWrapper:
             shutil.rmtree(self.clone_dir)
         self.logger.info("Deleted repository")
 
-    def _save_to_yaml(self, data):
+    def _save_to_yaml(self, data: list[dict[str, Any]]) -> None:
         """
         Saves the given data to a YAML file named 'endpoints_{solution}.yaml'.
 

@@ -1,3 +1,4 @@
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
@@ -8,7 +9,7 @@ pytestmark = pytest.mark.unit
 
 
 @pytest.fixture
-def cisco_client():
+def cisco_client() -> CiscoClientISE:
     return CiscoClientISE(
         username="test_user",
         password="test_password",
@@ -20,9 +21,11 @@ def cisco_client():
     )
 
 
-def test_process_ers_api_results_no_pagination(mocker, cisco_client):
+def test_process_ers_api_results_no_pagination(
+    mocker: Any, cisco_client: CiscoClientISE
+) -> None:
     # Mocking response when there's no pagination
-    mock_response = mocker.Mock()
+    mock_response: Mock = mocker.Mock()
     mock_response.status_code = 200
     mock_response.json.return_value = {
         "SearchResult": {
@@ -35,7 +38,9 @@ def test_process_ers_api_results_no_pagination(mocker, cisco_client):
     mocker.patch.object(cisco_client, "get_request", return_value=mock_response)
 
     # Call the method to test
-    data = cisco_client.process_ers_api_results(mock_response.json.return_value)
+    data: list[dict[str, Any]] = cisco_client.process_ers_api_results(
+        mock_response.json.return_value
+    )
 
     # Assertions
     assert len(data) == 2  # Total 2 resources without pagination
@@ -44,10 +49,12 @@ def test_process_ers_api_results_no_pagination(mocker, cisco_client):
     )  # All items should be dictionaries
 
 
-def test_process_ers_api_results_with_pagination(mocker, cisco_client):
+def test_process_ers_api_results_with_pagination(
+    mocker: Any, cisco_client: CiscoClientISE
+) -> None:
     # Mocking get_request method
-    def mock_get_request(url):
-        mock_responses = {
+    def mock_get_request(url: str) -> Mock:
+        mock_responses: dict[str, dict[str, Any]] = {
             "https://example.com/api/endpoint/1": {
                 "key": {
                     "id": "1",
@@ -106,9 +113,9 @@ def test_process_ers_api_results_with_pagination(mocker, cisco_client):
     mocker.patch.object(cisco_client, "get_request", side_effect=mock_get_request)
 
     # Call the method to test
-    data = []
-    response_url = "https://example.com/api/endpoint?size=1&page=1"
-    response_data = mock_get_request(response_url).json()
+    data: list[dict[str, Any]] = []
+    response_url: str = "https://example.com/api/endpoint?size=1&page=1"
+    response_data: dict[str, Any] = mock_get_request(response_url).json()
     data.extend(cisco_client.process_ers_api_results(response_data))
 
     # Assertions

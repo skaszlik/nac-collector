@@ -1,5 +1,6 @@
 import logging
 import os
+from typing import Any
 
 import requests
 import urllib3
@@ -17,20 +18,20 @@ class CiscoClientNDO(CiscoClient):
 
     def __init__(
         self,
-        username,
-        password,
-        base_url,
-        max_retries,
-        retry_after,
-        timeout,
-        ssl_verify,
-    ):
+        username: str,
+        password: str,
+        base_url: str,
+        max_retries: int,
+        retry_after: int,
+        timeout: int,
+        ssl_verify: bool,
+    ) -> None:
         self.domain = "DefaultAuth"
         super().__init__(
             username, password, base_url, max_retries, retry_after, timeout, ssl_verify
         )
 
-    def authenticate(self):
+    def authenticate(self) -> bool:
         auth_url = f"{self.base_url}{self.NDO_AUTH_ENDPOINT}"
 
         login_details = self.username.split("/")
@@ -59,7 +60,7 @@ class CiscoClientNDO(CiscoClient):
             return False
         return True
 
-    def get_from_endpoints(self, endpoints_yaml_file):
+    def get_from_endpoints(self, endpoints_yaml_file: str) -> dict[str, Any]:
         if os.path.isfile(endpoints_yaml_file):
             with open(endpoints_yaml_file, encoding="utf-8") as f:
                 endpoints = self.yaml.load(f)
@@ -91,10 +92,11 @@ class CiscoClientNDO(CiscoClient):
         final_dict = {}
 
         for endpoint in endpoints:
-            if all(x not in endpoint.get("endpoint", {}) for x in ["%v", "%i"]):  # noqa
+            if all(x not in endpoint.get("endpoint", "") for x in ["%v", "%i"]):  # noqa
                 endpoint_dict = CiscoClient.create_endpoint_dict(endpoint)
                 response = self.get_request(self.base_url + endpoint["endpoint"])  # noqa
-
+                if response is None:
+                    continue
                 data = response.json()
                 key = endpoint["name"]
 
@@ -108,27 +110,34 @@ class CiscoClientNDO(CiscoClient):
                 final_dict.update(endpoint_dict)
 
             else:
-                parent_endpoint = ""
-                parent_path = "/".join(endpoint.get("endpoint").split("/")[:-1])  # noqa
+                parent_endpoint: dict[str, Any] | str = ""
+                parent_path = "/".join(endpoint.get("endpoint", "").split("/")[:-1])  # noqa
                 for e in endpoints:
-                    if parent_path in e.get("endpoint") and e != endpoint:
+                    if parent_path in e.get("endpoint", "") and e != endpoint:
                         parent_endpoint = e
                         break
-                if parent_endpoint and parent_endpoint.get("name") in final_dict:  # noqa
+                if (
+                    isinstance(parent_endpoint, dict)
+                    and parent_endpoint.get("name") in final_dict
+                ):  # noqa
                     endpoint_dict = CiscoClient.create_endpoint_dict(endpoint)
 
                     r = []
 
                     for tmpl in final_dict[parent_endpoint["name"]]:
-                        reponse = self.get_request(
-                            self.base_url
-                            + endpoint["endpoint"].replace("%v", tmpl.get("templateId"))
-                        )  # noqa
-
-                        data = reponse.json()
+                        if isinstance(tmpl, dict) and "templateId" in tmpl:
+                            response_inner = self.get_request(
+                                self.base_url
+                                + endpoint["endpoint"].replace(
+                                    "%v", tmpl.get("templateId", "")
+                                )
+                            )  # noqa
+                            if response_inner is None:
+                                continue
+                            data = response_inner.json()
+                        else:
+                            continue
                         r.append(data)
 
                     final_dict.update({endpoint["name"]: r})
-        return final_dict
-        return final_dict
         return final_dict

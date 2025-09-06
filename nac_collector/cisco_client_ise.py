@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 import click
 import requests
@@ -29,19 +30,19 @@ class CiscoClientISE(CiscoClient):
 
     def __init__(
         self,
-        username,
-        password,
-        base_url,
-        max_retries,
-        retry_after,
-        timeout,
-        ssl_verify,
-    ):
+        username: str,
+        password: str,
+        base_url: str,
+        max_retries: int,
+        retry_after: int,
+        timeout: int,
+        ssl_verify: bool,
+    ) -> None:
         super().__init__(
             username, password, base_url, max_retries, retry_after, timeout, ssl_verify
         )
 
-    def authenticate(self):
+    def authenticate(self) -> bool:
         """
         Perform basic authentication.
 
@@ -88,9 +89,16 @@ class CiscoClientISE(CiscoClient):
                 "Authentication failed with status code: %s",
                 response.status_code,
             )
-            return False
 
-    def process_endpoint_data(self, endpoint, endpoint_dict, data):
+        # If all authentication endpoints failed
+        return False
+
+    def process_endpoint_data(
+        self,
+        endpoint: dict[str, Any],
+        endpoint_dict: dict[str, Any],
+        data: dict[str, Any] | list[Any] | None,
+    ) -> dict[str, Any]:
         """
         Process the data for a given endpoint and update the endpoint_dict.
 
@@ -114,14 +122,18 @@ class CiscoClientISE(CiscoClient):
                 {"data": data, "endpoint": endpoint["endpoint"]}
             )
 
-        elif data.get("response"):
-            for i in data.get("response"):
-                endpoint_dict[endpoint["name"]].append(
-                    {
-                        "data": i,
-                        "endpoint": endpoint["endpoint"] + "/" + self.get_id_value(i),
-                    }
-                )
+        elif data and data.get("response"):
+            response_items = data.get("response")
+            if response_items:
+                for i in response_items:
+                    endpoint_dict[endpoint["name"]].append(
+                        {
+                            "data": i,
+                            "endpoint": endpoint["endpoint"]
+                            + "/"
+                            + self.get_id_value(i),
+                        }
+                    )
 
         # Pagination for ERS API results
         elif data.get("SearchResult"):
@@ -137,7 +149,7 @@ class CiscoClientISE(CiscoClient):
 
         return endpoint_dict  # Return the processed endpoint dictionary
 
-    def get_from_endpoints(self, endpoints_yaml_file):
+    def get_from_endpoints(self, endpoints_yaml_file: str) -> dict[str, Any]:
         """
         Retrieve data from a list of endpoints specified in a YAML file and
         run GET requests to download data from controller.
@@ -227,7 +239,7 @@ class CiscoClientISE(CiscoClient):
                 final_dict.update(endpoint_dict)
         return final_dict
 
-    def process_ers_api_results(self, data):
+    def process_ers_api_results(self, data: dict[str, Any]) -> list[Any]:
         """
         Process ERS API results and handle pagination.
 
@@ -244,6 +256,8 @@ class CiscoClientISE(CiscoClient):
             url = data["SearchResult"]["nextPage"]["href"]
             # Send a GET request to the URL
             response = self.get_request(url)
+            if response is None:
+                break
             # Get the JSON content of the response
             data = response.json()
             paginated_data.extend(data["SearchResult"]["resources"])
@@ -253,6 +267,8 @@ class CiscoClientISE(CiscoClient):
         for element in paginated_data:
             url = element["link"]["href"]
             response = self.get_request(url)
+            if response is None:
+                continue
             # Get the JSON content of the response
             data = response.json()
 
@@ -262,7 +278,7 @@ class CiscoClientISE(CiscoClient):
         return ers_data
 
     @staticmethod
-    def get_id_value(i):
+    def get_id_value(i: dict[str, Any]) -> str | None:
         """
         Attempts to get the 'id' or 'name' value from a dictionary.
 
@@ -273,14 +289,12 @@ class CiscoClientISE(CiscoClient):
             str or None: The 'id' or 'name' value if it exists, None otherwise.
         """
         try:
-            id_value = i["id"]
+            return str(i["id"])
         except KeyError:
             try:
-                id_value = i["rule"]["id"]
+                return str(i["rule"]["id"])
             except KeyError:
                 try:
-                    id_value = i["name"]
+                    return str(i["name"])
                 except KeyError:
-                    id_value = None
-
-        return id_value
+                    return None

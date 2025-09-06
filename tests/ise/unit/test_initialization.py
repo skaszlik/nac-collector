@@ -5,8 +5,8 @@ from nac_collector.cisco_client_ise import CiscoClientISE
 pytestmark = pytest.mark.unit
 
 
-def test_initialization():
-    client = CiscoClientISE(
+def test_initialization() -> None:
+    client: CiscoClientISE = CiscoClientISE(
         username="test_user",
         password="test_password",
         base_url="https://example.com",

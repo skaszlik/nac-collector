@@ -1,6 +1,7 @@
 import copy
 import json
 import logging
+from typing import Any
 
 import click
 import requests
@@ -29,21 +30,21 @@ class CiscoClientFMC(CiscoClient):
 
     def __init__(
         self,
-        username,
-        password,
-        base_url,
-        max_retries,
-        retry_after,
-        timeout,
-        ssl_verify,
-    ):
+        username: str,
+        password: str,
+        base_url: str,
+        max_retries: int,
+        retry_after: int,
+        timeout: int,
+        ssl_verify: bool,
+    ) -> None:
         super().__init__(
             username, password, base_url, max_retries, retry_after, timeout, ssl_verify
         )
-        self.x_auth_refresh_token = None
-        self.domains = []
+        self.x_auth_refresh_token: str | None = None
+        self.domains: list[str] = []
 
-    def authenticate(self):
+    def authenticate(self) -> bool:
         """
         Perform basic authentication.
 
@@ -76,25 +77,36 @@ class CiscoClientFMC(CiscoClient):
                         "Content-Type": "application/json",
                         "Accept": "application/json",
                         "X-auth-access-token": response.headers.get(
-                            "X-auth-access-token"
+                            "X-auth-access-token", ""
                         ),
                     }
                 )
                 self.x_auth_refresh_token = response.headers.get("X-auth-refresh-token")
 
                 # Save a list of UUIDs of all available domains
-                self.domains = [
-                    x["uuid"] for x in json.loads(response.headers.get("DOMAINS"))
-                ]
+                domains_header = response.headers.get("DOMAINS")
+                if domains_header:
+                    self.domains = [
+                        x["uuid"]
+                        for x in json.loads(domains_header)
+                        if isinstance(x, dict) and "uuid" in x
+                    ]
                 return True
 
             logger.error(
                 "Authentication failed with status code: %s",
                 response.status_code,
             )
-            return False
 
-    def process_endpoint_data(self, endpoint, endpoint_dict, data):
+        # If all authentication endpoints failed
+        return False
+
+    def process_endpoint_data(
+        self,
+        endpoint: dict[str, Any],
+        endpoint_dict: dict[str, Any],
+        data: dict[str, Any] | list[Any] | None,
+    ) -> dict[str, Any]:
         """
         Process the data for a given endpoint and update the endpoint_dict.
 
@@ -118,17 +130,19 @@ class CiscoClientFMC(CiscoClient):
             )
 
         elif data.get("items", None):
-            for i in data.get("items"):
-                endpoint_dict[endpoint["name"]].append(
-                    {
-                        "data": i,
-                        "endpoint": f"{endpoint['endpoint']}/{self.get_id_value(i)}",
-                    }
-                )
+            items = data.get("items")
+            if items is not None:
+                for i in items:
+                    endpoint_dict[endpoint["name"]].append(
+                        {
+                            "data": i,
+                            "endpoint": f"{endpoint['endpoint']}/{self.get_id_value(i)}",
+                        }
+                    )
 
         return endpoint_dict  # Return the processed endpoint dictionary
 
-    def get_from_endpoints(self, endpoints_yaml_file):
+    def get_from_endpoints(self, endpoints_yaml_file: str) -> dict[str, Any]:
         """
         Retrieve data from a list of endpoints specified in a YAML file and
         run GET requests to download data from controller.
@@ -224,7 +238,7 @@ class CiscoClientFMC(CiscoClient):
         return final_dict
 
     @staticmethod
-    def get_id_value(i):
+    def get_id_value(i: dict[str, Any]) -> str | None:
         """
         Attempts to get the 'id' or 'name' value from a dictionary.
 
@@ -245,9 +259,11 @@ class CiscoClientFMC(CiscoClient):
                 except KeyError:
                     id_value = None
 
-        return id_value
+        return str(id_value) if id_value is not None else None
 
-    def fetch_data(self, endpoint: str, expanded: bool = True, limit: int = 1000):
+    def fetch_data(
+        self, endpoint: str, expanded: bool = True, limit: int = 1000
+    ) -> dict[str, Any] | None:
         """
         Fetches all data from a given endpoint (supports paging)
 
@@ -264,13 +280,16 @@ class CiscoClientFMC(CiscoClient):
         output = super().fetch_data(endpoint_url)
 
         if not output:
-            return []
+            return None
 
         if "paging" in output and "next" in output["paging"]:
             data = {"paging": output["paging"]}
             while True:
                 next_url_params = data["paging"]["next"][0].split("?")[1]
-                data = super().fetch_data(endpoint + "?" + next_url_params)
+                next_data = super().fetch_data(endpoint + "?" + next_url_params)
+                if next_data is None:
+                    break
+                data = next_data
                 output["items"].extend(data["items"])
                 if "next" not in data["paging"]:
                     break
@@ -293,7 +312,9 @@ class CiscoClientFMC(CiscoClient):
 
         return filtered
 
-    def resolve_domains(self, endpoints: list, domains: list):
+    def resolve_domains(
+        self, endpoints: list[dict[str, Any]], domains: list[str]
+    ) -> list[dict[str, Any]]:
         """
         Replace endpoint containing domain reference '{DOMAIN_UUID}' with one per domain.
 

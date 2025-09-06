@@ -7,6 +7,7 @@ import click
 import errorhandler
 
 import nac_collector
+from nac_collector.cisco_client import CiscoClient
 from nac_collector.cisco_client_catalystcenter import CiscoClientCATALYSTCENTER
 from nac_collector.cisco_client_fmc import CiscoClientFMC
 from nac_collector.cisco_client_ise import CiscoClientISE
@@ -102,19 +103,20 @@ def main(
     endpoints_yaml_file = endpoints_file or basefile
     output_file = output or f"{solution.lower()}.json"
 
+    cisco_client_class: type[CiscoClient] | None = None
     if solution == "SDWAN":
-        cisco_client = CiscoClientSDWAN
+        cisco_client_class = CiscoClientSDWAN
     elif solution == "ISE":
-        cisco_client = CiscoClientISE
+        cisco_client_class = CiscoClientISE
     elif solution == "NDO":
-        cisco_client = CiscoClientNDO
+        cisco_client_class = CiscoClientNDO
     elif solution == "FMC":
-        cisco_client = CiscoClientFMC
+        cisco_client_class = CiscoClientFMC
     elif solution == "CATALYSTCENTER":
-        cisco_client = CiscoClientCATALYSTCENTER
+        cisco_client_class = CiscoClientCATALYSTCENTER
 
-    if cisco_client:
-        client = cisco_client(
+    if cisco_client_class:
+        client = cisco_client_class(
             username=username,
             password=password,
             base_url=url,

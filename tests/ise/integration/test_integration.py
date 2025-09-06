@@ -1,4 +1,5 @@
 import json
+from typing import Any
 from unittest.mock import Mock, patch
 
 import pytest
@@ -10,7 +11,7 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.fixture
-def cisco_client():
+def cisco_client() -> CiscoClientISE:
     return CiscoClientISE(
         username="test_user",
         password="test_password",
@@ -22,10 +23,12 @@ def cisco_client():
     )
 
 
-def test_cisco_client_ise_with_integration(cisco_client, tmpdir):
-    def mock_get_request(url):
+def test_cisco_client_ise_with_integration(
+    cisco_client: CiscoClientISE, tmpdir: Any
+) -> None:
+    def mock_get_request(url: str) -> Mock:
         # Mock responses for specific API endpoints
-        mock_responses = {
+        mock_responses: dict[str, dict[str, Any]] = {
             "https://example.com/api/endpoint_1": {
                 "response": [
                     {
@@ -92,18 +95,18 @@ def test_cisco_client_ise_with_integration(cisco_client, tmpdir):
     # Patching get_request method with mock implementation
     with patch.object(cisco_client, "get_request", side_effect=mock_get_request):
         # Call the method to test
-        final_dict = cisco_client.get_from_endpoints(
+        final_dict: dict[str, Any] = cisco_client.get_from_endpoints(
             "tests/ise/integration/fixtures/endpoints.yaml"
         )
 
         # Write final_dict to a temporary JSON file
-        output_file = tmpdir.join("ise.json")
+        output_file: Any = tmpdir.join("ise.json")
         cisco_client.write_to_json(final_dict, str(output_file))
 
         # Compare the content of ise.json with expected data
-        expected_json_file = "tests/ise/integration/fixtures/ise.json"
+        expected_json_file: str = "tests/ise/integration/fixtures/ise.json"
         with open(expected_json_file) as f_expected, open(str(output_file)) as f_actual:
-            expected_data = json.load(f_expected)
-            actual_data = json.load(f_actual)
+            expected_data: dict[str, Any] = json.load(f_expected)
+            actual_data: dict[str, Any] = json.load(f_actual)
 
         assert actual_data == expected_data, "Output JSON data does not match expected"
