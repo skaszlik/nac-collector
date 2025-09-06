@@ -21,33 +21,31 @@ pip install git+https://github.com/netascode/nac-collector.git
 
 ## Usage
 
-```cli
+```
 Usage: nac-collector [OPTIONS]
 
-  A CLI tool to collect various network configurations.
+A CLI tool to collect various network configurations.
 
 Options:
-  --version                       Show the version and exit.
-  -v, --verbosity LVL             Either CRITICAL, ERROR, WARNING, INFO or
-                                  DEBUG
-  -s, --solution [SDWAN|ISE|NDO|FMC|CATALYSTCENTER]
-                                  Solutions supported [SDWAN, ISE, NDO, FMC,
-                                  CATALYSTCENTER]  [required]
-  -u, --username TEXT             Username for authentication. Can also be set
-                                  using the NAC_USERNAME environment variable
-                                  [required]
-  -p, --password TEXT             Password for authentication. Can also be set
-                                  using the NAC_PASSWORD environment variable
-                                  [required]
-  -url, --url TEXT                Base URL for the service. Can also be set
-                                  using the NAC_URL environment variable
-                                  [required]
-  -g, --git-provider              Generate endpoint.yaml automatically using
-                                  provider github repo
-  -e, --endpoints-file TEXT       Path to the endpoints YAML file
-  -t, --timeout INTEGER           Request timeout in seconds. Default is 30.
-  -o, --output TEXT               Path to the output json file
-  -h, --help                      Show this message and exit.
+  * -s, --solution [SDWAN|ISE|NDO|FMC|CATALYSTCENTER]
+                        Solutions supported [required]
+  * -u, --username TEXT Username for authentication [required]
+                        [env var: NAC_USERNAME]
+  * -p, --password TEXT Password for authentication [required]
+                        [env var: NAC_PASSWORD]
+  * --url TEXT          Base URL for the service [required]
+                        [env var: NAC_URL]
+  -v, --verbosity [CRITICAL|ERROR|WARNING|INFO|DEBUG]
+                        Log level [default: WARNING]
+  -g, --git-provider    Generate endpoint.yaml automatically from
+                        provider GitHub repo
+  -e, --endpoints-file TEXT
+                        Path to the endpoints YAML file
+  -t, --timeout INTEGER
+                        Request timeout in seconds [default: 30]
+  -o, --output TEXT     Path to the output JSON file
+  --version             Show version and exit
+  --help                Show this message and exit
 ```
 
 Set environment variables pointing to supported solution instance:
