@@ -1,10 +1,13 @@
 import logging
 import os
-import sys
 import time
+from enum import Enum
+from typing import Annotated
 
-import click
 import errorhandler
+import typer
+from rich.console import Console
+from rich.logging import RichHandler
 
 import nac_collector
 from nac_collector.cisco_client import CiscoClient
@@ -13,66 +16,132 @@ from nac_collector.cisco_client_fmc import CiscoClientFMC
 from nac_collector.cisco_client_ise import CiscoClientISE
 from nac_collector.cisco_client_ndo import CiscoClientNDO
 from nac_collector.cisco_client_sdwan import CiscoClientSDWAN
-from nac_collector.constants import GIT_TMP, MAX_RETRIES, RETRY_AFTER
+from nac_collector.constants import GIT_TMP, MAX_RETRIES, RETRY_AFTER, TIMEOUT
 from nac_collector.github_repo_wrapper import GithubRepoWrapper
 
-from . import options
-
+console = Console()
 logger = logging.getLogger("main")
-
 error_handler = errorhandler.ErrorHandler()
 
 
-def configure_logging(level: str) -> None:
-    if level == "DEBUG":
-        lev = logging.DEBUG
-    elif level == "INFO":
-        lev = logging.INFO
-    elif level == "WARNING":
-        lev = logging.WARNING
-    elif level == "ERROR":
-        lev = logging.ERROR
-    else:
-        lev = logging.CRITICAL
-    logger = logging.getLogger()
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(
-        logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    )
-    logger.addHandler(handler)
-    logger.setLevel(lev)
+class LogLevel(str, Enum):
+    """Supported log levels."""
+
+    CRITICAL = "CRITICAL"
+    ERROR = "ERROR"
+    WARNING = "WARNING"
+    INFO = "INFO"
+    DEBUG = "DEBUG"
+
+
+class Solution(str, Enum):
+    """Supported solutions."""
+
+    SDWAN = "SDWAN"
+    ISE = "ISE"
+    NDO = "NDO"
+    FMC = "FMC"
+    CATALYSTCENTER = "CATALYSTCENTER"
+
+
+def configure_logging(level: LogLevel) -> None:
+    """Configure logging with Rich handler."""
+    level_map = {
+        LogLevel.DEBUG: logging.DEBUG,
+        LogLevel.INFO: logging.INFO,
+        LogLevel.WARNING: logging.WARNING,
+        LogLevel.ERROR: logging.ERROR,
+        LogLevel.CRITICAL: logging.CRITICAL,
+    }
+
+    root_logger = logging.getLogger()
+    # Clear existing handlers
+    root_logger.handlers.clear()
+
+    # Add Rich handler
+    handler = RichHandler(console=console, show_time=True, show_path=False)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    root_logger.addHandler(handler)
+    root_logger.setLevel(level_map[level])
     error_handler.reset()
 
 
-@click.command(context_settings={"help_option_names": ["-h", "--help"]})
-@click.version_option(nac_collector.__version__)
-@click.option(
-    "-v",
-    "--verbosity",
-    metavar="LVL",
-    is_eager=True,
-    type=click.Choice(["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"]),
-    help="Either CRITICAL, ERROR, WARNING, INFO or DEBUG",
-    default="WARNING",
-)
-@options.solution
-@options.username
-@options.password
-@options.url
-@options.git_provider
-@options.endpoints_file
-@options.timeout
-@options.output
+def version_callback(value: bool) -> None:
+    """Show version and exit."""
+    if value:
+        console.print(f"nac-collector version: {nac_collector.__version__}")
+        raise typer.Exit()
+
+
 def main(
-    verbosity: str,
-    solution: str,
-    username: str,
-    password: str,
-    url: str,
-    git_provider: bool,
-    endpoints_file: str,
-    timeout: int,
-    output: str,
+    solution: Annotated[
+        Solution,
+        typer.Option(
+            "-s",
+            "--solution",
+            help="Solutions supported [SDWAN, ISE, NDO, FMC, CATALYSTCENTER]",
+        ),
+    ],
+    username: Annotated[
+        str,
+        typer.Option(
+            "-u",
+            "--username",
+            envvar="NAC_USERNAME",
+            help="Username for authentication. Can also be set using the NAC_USERNAME environment variable",
+        ),
+    ],
+    password: Annotated[
+        str,
+        typer.Option(
+            "-p",
+            "--password",
+            envvar="NAC_PASSWORD",
+            help="Password for authentication. Can also be set using the NAC_PASSWORD environment variable",
+        ),
+    ],
+    url: Annotated[
+        str,
+        typer.Option(
+            "--url",
+            envvar="NAC_URL",
+            help="Base URL for the service. Can also be set using the NAC_URL environment variable",
+        ),
+    ],
+    verbosity: Annotated[
+        LogLevel,
+        typer.Option(
+            "-v", "--verbosity", help="Either CRITICAL, ERROR, WARNING, INFO or DEBUG"
+        ),
+    ] = LogLevel.WARNING,
+    git_provider: Annotated[
+        bool,
+        typer.Option(
+            "-g",
+            "--git-provider",
+            help="Generate endpoint.yaml automatically using provider github repo",
+        ),
+    ] = False,
+    endpoints_file: Annotated[
+        str | None,
+        typer.Option("-e", "--endpoints-file", help="Path to the endpoints YAML file"),
+    ] = None,
+    timeout: Annotated[
+        int,
+        typer.Option(
+            "-t", "--timeout", help=f"Request timeout in seconds. Default is {TIMEOUT}."
+        ),
+    ] = TIMEOUT,
+    output: Annotated[
+        str | None,
+        typer.Option("-o", "--output", help="Path to the output json file"),
+    ] = None,
+    version: Annotated[
+        bool | None,
+        typer.Option(
+            "--version", callback=version_callback, help="Show the version and exit."
+        ),
+    ] = None,
 ) -> None:
     """A CLI tool to collect various network configurations."""
 
@@ -82,37 +151,37 @@ def main(
     configure_logging(verbosity)
 
     # Check for incompatible option combinations
-    if git_provider and solution == "NDO":
-        logger.error(
-            "--git-provider option is not supported with NDO solution. The NDO solution uses a different repository structure that is incompatible with the git provider functionality."
+    if git_provider and solution == Solution.NDO:
+        console.print(
+            "[red]--git-provider option is not supported with NDO solution. The NDO solution uses a different repository structure that is incompatible with the git provider functionality.[/red]"
         )
-        sys.exit(1)
+        raise typer.Exit(1)
 
     if git_provider:
         wrapper = GithubRepoWrapper(
-            repo_url=f"https://github.com/CiscoDevNet/terraform-provider-{solution.lower()}.git",
+            repo_url=f"https://github.com/CiscoDevNet/terraform-provider-{solution.value.lower()}.git",
             clone_dir=GIT_TMP,
-            solution=solution.lower(),
+            solution=solution.value.lower(),
         )
         wrapper.get_definitions()
 
-    basefile = f"endpoints_{solution.lower()}.yaml"
+    basefile = f"endpoints_{solution.value.lower()}.yaml"
     if not os.path.isfile(basefile):
         basefile = os.path.join("endpoints", basefile)
 
     endpoints_yaml_file = endpoints_file or basefile
-    output_file = output or f"{solution.lower()}.json"
+    output_file = output or f"{solution.value.lower()}.json"
 
     cisco_client_class: type[CiscoClient] | None = None
-    if solution == "SDWAN":
+    if solution == Solution.SDWAN:
         cisco_client_class = CiscoClientSDWAN
-    elif solution == "ISE":
+    elif solution == Solution.ISE:
         cisco_client_class = CiscoClientISE
-    elif solution == "NDO":
+    elif solution == Solution.NDO:
         cisco_client_class = CiscoClientNDO
-    elif solution == "FMC":
+    elif solution == Solution.FMC:
         cisco_client_class = CiscoClientFMC
-    elif solution == "CATALYSTCENTER":
+    elif solution == Solution.CATALYSTCENTER:
         cisco_client_class = CiscoClientCATALYSTCENTER
 
     if cisco_client_class:
@@ -128,8 +197,8 @@ def main(
 
         # Authenticate
         if not client.authenticate():
-            logger.error("Authentication failed. Exiting...")
-            return
+            console.print("[red]Authentication failed. Exiting...[/red]")
+            raise typer.Exit(1)
 
         final_dict = client.get_from_endpoints(endpoints_yaml_file)
         client.write_to_json(final_dict, output_file)
@@ -141,11 +210,21 @@ def main(
     total_time = stop_time - start_time
     logger.info(f"Total execution time: {total_time:.2f} seconds")
 
-    exit()
+    exit_app()
 
 
-def exit() -> None:
+def exit_app() -> None:
+    """Exit the application based on error handler state."""
     if error_handler.fired:
-        sys.exit(1)
+        raise typer.Exit(1)
     else:
-        sys.exit(0)
+        raise typer.Exit(0)
+
+
+def app() -> None:
+    """Run the application."""
+    typer.run(main)
+
+
+if __name__ == "__main__":
+    app()

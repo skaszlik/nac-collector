@@ -6,10 +6,16 @@ import os
 import threading
 from typing import Any
 
-import click
 import requests
 import urllib3
 from requests.adapters import HTTPAdapter
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TaskProgressColumn,
+    TextColumn,
+)
 from tinydb import Query, TinyDB
 from urllib3.util.retry import Retry
 
@@ -304,9 +310,23 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
         final_dict = {}
 
         # Iterate over all endpoints
-        with click.progressbar(endpoints, label="Processing endpoints") as endpoint_bar:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            console=None,
+        ) as progress:
+            task = progress.add_task("Processing endpoints", total=len(endpoints))
             with concurrent.futures.ThreadPoolExecutor() as executor:
-                results = list(executor.map(self.process_endpoint, endpoint_bar))
+                results = []
+                futures = [
+                    executor.submit(self.process_endpoint, endpoint)
+                    for endpoint in endpoints
+                ]
+                for future in concurrent.futures.as_completed(futures):
+                    results.append(future.result())
+                    progress.advance(task)
             for r in results:
                 if r is not None:
                     final_dict.update(r)

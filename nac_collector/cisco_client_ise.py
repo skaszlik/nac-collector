@@ -1,9 +1,15 @@
 import logging
 from typing import Any
 
-import click
 import requests
 import urllib3
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TaskProgressColumn,
+    TextColumn,
+)
 
 from nac_collector.cisco_client import CiscoClient
 
@@ -170,8 +176,16 @@ class CiscoClientISE(CiscoClient):
         final_dict = {}
 
         # Iterate over all endpoints
-        with click.progressbar(endpoints, label="Processing endpoints") as endpoint_bar:
-            for endpoint in endpoint_bar:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            console=None,
+        ) as progress:
+            task = progress.add_task("Processing endpoints", total=len(endpoints))
+            for endpoint in endpoints:
+                progress.advance(task)
                 logger.info("Processing endpoint: %s", endpoint["name"])
 
                 endpoint_dict = CiscoClient.create_endpoint_dict(endpoint)

@@ -3,8 +3,14 @@ import os
 import shutil
 from typing import Any
 
-import click
 from git import Repo
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TaskProgressColumn,
+    TextColumn,
+)
 from ruamel.yaml import YAML
 
 logger = logging.getLogger("main")
@@ -89,10 +95,18 @@ class GithubRepoWrapper:
 
         for root, _, files in os.walk(definitions_dir):
             # Iterate over all endpoints
-            with click.progressbar(
-                files, label="Processing terraform provider definitions"
-            ) as files_bar:
-                for file in files_bar:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TaskProgressColumn(),
+                console=None,
+            ) as progress:
+                task = progress.add_task(
+                    "Processing terraform provider definitions", total=len(files)
+                )
+                for file in files:
+                    progress.advance(task)
                     # Exclude *_update_rank used in ISE from inspecting
                     if file.endswith(".yaml") and not file.endswith("update_rank.yaml"):
                         with open(os.path.join(root, file), encoding="utf-8") as f:

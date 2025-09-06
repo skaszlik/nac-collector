@@ -26,7 +26,8 @@ classifiers = [
     "Topic :: System :: Networking",
 ]
 dependencies = [
-    "click>=8.2.1",
+    "typer>=0.15.1",
+    "rich>=13.9.4",
     "gitpython>=3.1.45",
     "requests>=2.32.5",
     "ruamel.yaml>=0.18.15",
@@ -41,7 +42,7 @@ repository = "https://github.com/netascode/nac-collector"
 documentation = "https://github.com/netascode/nac-collector"
 
 [project.scripts]
-nac-collector = "nac_collector.cli.main:main"
+nac-collector = "nac_collector.cli.main:app"
 
 [project.optional-dependencies]
 dev = [
