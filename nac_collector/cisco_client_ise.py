@@ -1,8 +1,7 @@
 import logging
 from typing import Any
 
-import requests
-import urllib3
+import httpx
 from rich.progress import (
     BarColumn,
     Progress,
@@ -13,11 +12,7 @@ from rich.progress import (
 
 from nac_collector.cisco_client import CiscoClient
 
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 logger = logging.getLogger("main")
-
-# Suppress urllib3 warnings
-logging.getLogger("urllib3").setLevel(logging.ERROR)
 
 
 class CiscoClientISE(CiscoClient):
@@ -72,7 +67,7 @@ class CiscoClientISE(CiscoClient):
                     "Accept": "application/json",
                 }
 
-            response = requests.get(
+            response = httpx.get(
                 auth_url,
                 auth=(self.username, self.password),
                 headers=headers,
@@ -82,11 +77,14 @@ class CiscoClientISE(CiscoClient):
 
             if response and response.status_code == 200:
                 logger.info("Authentication Successful for URL: %s", auth_url)
-                # Create a session after successful authentication
-                self.session = requests.Session()
-                self.session.auth = (self.username, self.password)
-                self.session.headers.update(headers)
-                self.session.headers.update(
+                # Create a client after successful authentication
+                self.client = httpx.Client(
+                    auth=(self.username, self.password),
+                    verify=self.ssl_verify,
+                    timeout=self.timeout,
+                )
+                self.client.headers.update(headers)
+                self.client.headers.update(
                     {"Content-Type": "application/json", "Accept": "application/json"}
                 )
                 return True

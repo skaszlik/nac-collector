@@ -2,12 +2,9 @@ import logging
 import os
 from typing import Any
 
-import requests
-import urllib3
+import httpx
 
 from nac_collector.cisco_client import CiscoClient
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logger = logging.getLogger("main")
 
@@ -46,13 +43,14 @@ class CiscoClientNDO(CiscoClient):
             "domain": self.domain,
         }
 
-        self.session = requests.Session()
-
-        response = self.session.post(
-            auth_url, json=data, verify=self.ssl_verify, timeout=self.timeout
+        self.client = httpx.Client(
+            verify=self.ssl_verify,
+            timeout=self.timeout,
         )
 
-        if response.status_code != requests.codes.ok:
+        response = self.client.post(auth_url, json=data)
+
+        if response.status_code != 200:
             logger.error(
                 "Authentication failed with status code: %s",
                 response.status_code,

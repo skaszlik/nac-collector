@@ -4,11 +4,8 @@ import time
 from abc import ABC, abstractmethod
 from typing import Any
 
-import requests
-import urllib3
+import httpx
 from ruamel.yaml import YAML
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 class CiscoClient(ABC):
@@ -43,7 +40,7 @@ class CiscoClient(ABC):
         self.retry_after = retry_after
         self.timeout = timeout
         self.ssl_verify = ssl_verify
-        self.session: requests.Session | None = None
+        self.client: httpx.Client | None = None
         # Create an instance of the YAML class
         self.yaml = YAML(typ="safe", pure=True)
         self.logger = logging.getLogger(__name__)
@@ -77,7 +74,7 @@ class CiscoClient(ABC):
             NotImplementedError: If this method is not overridden in a concrete subclass.
         """
 
-    def get_request(self, url: str) -> requests.Response | None:
+    def get_request(self, url: str) -> httpx.Response | None:
         """
         Send a GET request to a specific URL and handle a 429 status code.
 
@@ -85,20 +82,18 @@ class CiscoClient(ABC):
             url (str): The URL to send the GET request to.
 
         Returns:
-            response (requests.Response): The response from the GET request.
+            response (httpx.Response): The response from the GET request.
         """
         response = None
         for _ in range(self.max_retries):
             try:
                 # Send a GET request to the URL
-                if self.session is None:
-                    self.logger.error("Session not initialized")
+                if self.client is None:
+                    self.logger.error("Client not initialized")
                     return None
-                response = self.session.get(
-                    url, verify=self.ssl_verify, timeout=self.timeout
-                )
+                response = self.client.get(url)
 
-            except requests.exceptions.Timeout:
+            except httpx.TimeoutException:
                 self.logger.error(
                     "GET %s timed out after %s seconds.", url, self.timeout
                 )
@@ -135,7 +130,7 @@ class CiscoClient(ABC):
         # or if no successful response was received, return the last response
         return response
 
-    def post_request(self, url: str, data: dict[str, Any]) -> requests.Response | None:
+    def post_request(self, url: str, data: dict[str, Any]) -> httpx.Response | None:
         """
         Send a POST request to a specific URL and handle a 429 status code.
 
@@ -144,18 +139,16 @@ class CiscoClient(ABC):
             data (dict): The data to send in the body of the POST request.
 
         Returns:
-            response (requests.Response): The response from the GET request.
+            response (httpx.Response): The response from the POST request.
         """
         for _ in range(self.max_retries):
             try:
                 # Send a POST request to the URL
-                if self.session is None:
-                    self.logger.error("Session not initialized")
+                if self.client is None:
+                    self.logger.error("Client not initialized")
                     return None
-                response = self.session.post(
-                    url, data=data, verify=self.ssl_verify, timeout=self.timeout
-                )
-            except requests.exceptions.Timeout:
+                response = self.client.post(url, data=data)
+            except httpx.TimeoutException:
                 self.logger.error(
                     "POST %s timed out after %s seconds.", url, self.timeout
                 )
@@ -187,13 +180,13 @@ class CiscoClient(ABC):
         # or if no successful response was received, return the last response
         return response
 
-    def log_response(self, endpoint: str, response: requests.Response) -> None:
+    def log_response(self, endpoint: str, response: httpx.Response) -> None:
         """
         Logs the response from a GET request.
 
         Parameters:
             endpoint (str): The endpoint the request was sent to.
-            response (Response): The response from the request.
+            response (httpx.Response): The response from the request.
         """
         if response.status_code == 200:
             self.logger.info(

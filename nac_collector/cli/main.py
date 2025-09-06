@@ -79,7 +79,7 @@ def main(
         typer.Option(
             "-s",
             "--solution",
-            help="Solutions supported [SDWAN, ISE, NDO, FMC, CATALYSTCENTER]",
+            help="Choose a solution",
         ),
     ],
     username: Annotated[

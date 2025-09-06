@@ -1,12 +1,9 @@
 import logging
 from typing import Any
 
-import requests
-import urllib3
+import httpx
 
 from nac_collector.cisco_client import CiscoClient
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logger = logging.getLogger("main")
 
@@ -47,29 +44,32 @@ class CiscoClientSDWAN(CiscoClient):
 
         data = {"j_username": self.username, "j_password": self.password}
 
-        response = requests.post(
+        response = httpx.post(
             auth_url, data=data, verify=self.ssl_verify, timeout=self.timeout
         )
 
         try:
             cookies = response.headers["Set-Cookie"]
             jsessionid = cookies.split(";")[0]
-        except requests.exceptions.InvalidHeader:
+        except (KeyError, IndexError):
             logger.error("No valid JSESSION ID returned")
             jsessionid = None
 
-        headers = {"Cookie": jsessionid}
+        headers = {"Cookie": jsessionid} if jsessionid else {}
         url = self.base_url + "/dataservice/client/token"
-        response = requests.get(
+        response = httpx.get(
             url=url, headers=headers, verify=self.ssl_verify, timeout=self.timeout
         )
 
         if response and response.status_code == 200:
             logger.info("Authentication Successful for URL: %s", auth_url)
 
-            # Create a session after successful authentication
-            self.session = requests.Session()
-            self.session.headers.update(
+            # Create a client after successful authentication
+            self.client = httpx.Client(
+                verify=self.ssl_verify,
+                timeout=self.timeout,
+            )
+            self.client.headers.update(
                 {
                     "Content-Type": "application/json",
                     "Cookie": jsessionid or "",

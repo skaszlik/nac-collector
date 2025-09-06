@@ -6,9 +6,7 @@ import os
 import threading
 from typing import Any
 
-import requests
-import urllib3
-from requests.adapters import HTTPAdapter
+import httpx
 from rich.progress import (
     BarColumn,
     Progress,
@@ -17,15 +15,10 @@ from rich.progress import (
     TextColumn,
 )
 from tinydb import Query, TinyDB
-from urllib3.util.retry import Retry
 
 from nac_collector.cisco_client import CiscoClient
 
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 logger = logging.getLogger("main")
-
-# Suppress urllib3 warnings
-logging.getLogger("urllib3").setLevel(logging.ERROR)
 
 
 class CiscoClientCATALYSTCENTER(CiscoClient):
@@ -113,27 +106,16 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
             "Authorization": "application/json",
         }
 
-        # retries = self.max_retries # standard use
-        retries = 30
-
-        retry_cfg = Retry(
-            connect=retries,
-            read=retries,
-            status=0,
-            backoff_factor=1,
-            allowed_methods={"POST"},
-            raise_on_status=False,
+        # Create httpx session (retry logic handled by base class)
+        session = httpx.Client(
+            verify=self.ssl_verify,
+            timeout=self.timeout,
         )
-
-        session = requests.Session()
-        session.mount("https://", HTTPAdapter(max_retries=retry_cfg))
 
         response = session.post(
             auth_url,
             auth=(self.username, self.password),
             headers=headers,
-            verify=self.ssl_verify,
-            timeout=self.timeout,
         )
 
         if response and response.status_code == 200:
@@ -141,8 +123,11 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
 
             token = response.json()["Token"]
 
-            self.session = requests.Session()
-            self.session.headers.update(
+            self.client = httpx.Client(
+                verify=self.ssl_verify,
+                timeout=self.timeout,
+            )
+            self.client.headers.update(
                 {
                     "Content-Type": "application/json",
                     "x-auth-token": token,
