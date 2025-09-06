@@ -96,7 +96,7 @@ def test_cisco_client_ise_with_integration(
     with patch.object(cisco_client, "get_request", side_effect=mock_get_request):
         # Call the method to test
         final_dict: dict[str, Any] = cisco_client.get_from_endpoints(
-            "tests/ise/integration/fixtures/endpoints.yaml"
+            "tests/integration/ise/fixtures/endpoints.yaml"
         )
 
         # Write final_dict to a temporary JSON file
@@ -104,7 +104,7 @@ def test_cisco_client_ise_with_integration(
         cisco_client.write_to_json(final_dict, str(output_file))
 
         # Compare the content of ise.json with expected data
-        expected_json_file: str = "tests/ise/integration/fixtures/ise.json"
+        expected_json_file: str = "tests/integration/ise/fixtures/ise.json"
         with open(expected_json_file) as f_expected, open(str(output_file)) as f_actual:
             expected_data: dict[str, Any] = json.load(f_expected)
             actual_data: dict[str, Any] = json.load(f_actual)
