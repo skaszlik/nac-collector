@@ -409,19 +409,19 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "bandit", extras = ["toml"], marker = "extra == 'dev'", specifier = ">=1.8.6" },
-    { name = "click", specifier = ">=8.1.7" },
+    { name = "click", specifier = ">=8.2.1" },
     { name = "errorhandler", specifier = ">=2.0.1" },
-    { name = "gitpython", specifier = ">=3.1.42" },
+    { name = "gitpython", specifier = ">=3.1.45" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.17.1" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.3.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.4.2" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.2.1" },
     { name = "pytest-mock", marker = "extra == 'dev'", specifier = ">=3.15.0" },
-    { name = "requests", specifier = ">=2.31.0" },
+    { name = "requests", specifier = ">=2.32.5" },
     { name = "ruamel-yaml", specifier = ">=0.18.15" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12.12" },
     { name = "tinydb", specifier = ">=4.8.2" },
-    { name = "types-requests", marker = "extra == 'dev'", specifier = ">=2.31.0.20241124" },
+    { name = "types-requests", marker = "extra == 'dev'", specifier = ">=2.32.4.20250809" },
     { name = "urllib3", specifier = ">=2.5.0" },
 ]
 provides-extras = ["dev"]
