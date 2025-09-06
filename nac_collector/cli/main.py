@@ -1,5 +1,4 @@
 import logging
-import os
 import time
 from enum import Enum
 from typing import Annotated
@@ -18,6 +17,7 @@ from nac_collector.cisco_client_ndo import CiscoClientNDO
 from nac_collector.cisco_client_sdwan import CiscoClientSDWAN
 from nac_collector.constants import GIT_TMP, MAX_RETRIES, RETRY_AFTER, TIMEOUT
 from nac_collector.github_repo_wrapper import GithubRepoWrapper
+from nac_collector.resource_manager import ResourceManager
 
 console = Console()
 logger = logging.getLogger("main")
@@ -153,19 +153,33 @@ def main(
         )
         raise typer.Exit(1)
 
-    if git_provider:
+    # Resolve endpoint file using fallback chain
+    endpoints_yaml_file = ResourceManager.resolve_endpoint_file(
+        solution=solution.value.lower(),
+        explicit_file=endpoints_file,
+        use_git_provider=git_provider,
+    )
+
+    if endpoints_yaml_file is None and git_provider:
+        # Git provider mode - fetch endpoints from GitHub
         wrapper = GithubRepoWrapper(
             repo_url=f"https://github.com/CiscoDevNet/terraform-provider-{solution.value.lower()}.git",
             clone_dir=GIT_TMP,
             solution=solution.value.lower(),
         )
         wrapper.get_definitions()
+        # After git provider runs, the file should be available in current directory
+        endpoints_yaml_file = f"endpoints_{solution.value.lower()}.yaml"
 
-    basefile = f"endpoints_{solution.value.lower()}.yaml"
-    if not os.path.isfile(basefile):
-        basefile = os.path.join("endpoints", basefile)
-
-    endpoints_yaml_file = endpoints_file or basefile
+    if endpoints_yaml_file is None:
+        console.print(
+            f"[red]No endpoint file found for solution: {solution.value}[/red]"
+        )
+        console.print("[yellow]Available options:[/yellow]")
+        console.print("1. Use --endpoints-file to specify a custom file")
+        console.print("2. Use --git-provider to fetch from GitHub")
+        console.print("3. Ensure packaged resources are available")
+        raise typer.Exit(1)
     output_file = output or f"{solution.value.lower()}.json"
 
     cisco_client_class: type[CiscoClient] | None = None

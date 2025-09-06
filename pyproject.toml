@@ -110,6 +110,9 @@ known-first-party = ["nac_collector"]
 exclude_dirs = ["tests"]
 skips = ["B101"]  # Skip assert_used test
 
+[tool.hatch.build.targets.wheel]
+packages = ["nac_collector"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
