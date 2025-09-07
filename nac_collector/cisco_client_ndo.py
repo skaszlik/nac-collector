@@ -1,5 +1,4 @@
 import logging
-import os
 from typing import Any
 
 import httpx
@@ -58,35 +57,18 @@ class CiscoClientNDO(CiscoClient):
             return False
         return True
 
-    def get_from_endpoints(self, endpoints_yaml_file: str) -> dict[str, Any]:
-        if os.path.isfile(endpoints_yaml_file):
-            with open(endpoints_yaml_file, encoding="utf-8") as f:
-                endpoints = self.yaml.load(f)
-        else:
-            endpoints = [
-                {"endpoint": "/mso/api/v1/tenants", "name": "tenants"},
-                {"endpoint": "/mso/api/v1/schemas", "name": "schemas"},
-                {"endpoint": "/mso/api/v1/schemas/sites", "name": "site_details"},
-                {"endpoint": "/mso/api/v2/users", "name": "users"},
-                {
-                    "endpoint": "/mso/api/v2/sites/fabric-connectivity",
-                    "name": "fabric_connectivity",
-                },
-                {
-                    "endpoint": "/mso/api/v1/templates/summaries",
-                    "name": "template_summary",
-                },
-                {"endpoint": "/mso/api/v1/templates/%v", "name": "templates"},
-                {"endpoint": "/mso/api/v1/platform/version", "name": "version"},
-                {
-                    "endpoint": "/mso/api/v1/platform/systemConfig",
-                    "name": "system_configs",
-                },
-                {
-                    "endpoint": "/mso/api/v1/platform/remote-locations",
-                    "name": "remote_locations",
-                },
-            ]
+
+    def get_from_endpoints_data(self, endpoints_data: list[dict[str, Any]]) -> dict[str, Any]:
+        """
+        Retrieve data from a list of endpoint definitions provided as data structure.
+
+        Parameters:
+            endpoints_data (list[dict[str, Any]]): List of endpoint definitions with name and endpoint keys.
+
+        Returns:
+            dict: The final dictionary containing the data retrieved from the endpoints.
+        """
+        endpoints = endpoints_data
         final_dict = {}
 
         for endpoint in endpoints:

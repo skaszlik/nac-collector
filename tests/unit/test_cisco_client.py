@@ -16,7 +16,7 @@ class ConcreteCiscoClient(CiscoClient):
     def authenticate(self) -> bool:
         return True
 
-    def get_from_endpoints(self, endpoints_yaml_file: str) -> dict[str, Any]:
+    def get_from_endpoints_data(self, endpoints_data: list[dict[str, Any]]) -> dict[str, Any]:
         return {"test": "data"}
 
 

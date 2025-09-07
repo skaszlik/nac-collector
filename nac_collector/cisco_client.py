@@ -58,14 +58,14 @@ class CiscoClient(ABC):
         """
 
     @abstractmethod
-    def get_from_endpoints(self, endpoints_yaml_file: str) -> dict[str, Any]:
+    def get_from_endpoints_data(self, endpoints_data: list[dict[str, Any]]) -> dict[str, Any]:
         """
-        Abstract method to get data from specified endpoints.
+        Abstract method to get data from endpoints provided as a data structure.
 
         This method should be implemented by any concrete subclass.
 
         Parameters:
-            endpoints_yaml_file (str): The path to a YAML file containing the endpoints to get data from.
+            endpoints_data (list[dict[str, Any]]): List of endpoint definitions with name and endpoint keys.
 
         Returns:
             This method should return the data obtained from the endpoints.

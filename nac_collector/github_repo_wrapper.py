@@ -70,7 +70,7 @@ class GithubRepoWrapper:
             self.clone_dir,
         )
 
-    def get_definitions(self) -> None:
+    def get_definitions(self) -> list[dict[str, Any]]:
         """
         This method inspects YAML files in a specific directory, extracts endpoint information,
         and saves it to a new YAML file. It specifically looks for files ending with '.yaml'
@@ -83,10 +83,11 @@ class GithubRepoWrapper:
         If the method encounters a directory named 'feature_templates', it appends a specific
         endpoint format to the endpoints list and a corresponding dictionary to the endpoints_list list.
 
-        After traversing all files and directories, it saves the endpoints_list list to a new
-        YAML file named 'endpoints_{self.solution}.yaml' and then deletes the cloned repository.
+        After traversing all files and directories, it processes the endpoints_list and deletes
+        the cloned repository.
 
-        This method does not return any value.
+        Returns:
+            list[dict[str, Any]]: List of endpoint definitions with name and endpoint keys.
         """
         definitions_dir = os.path.join(self.clone_dir, "gen", "definitions")
         self.logger.info("Inspecting YAML files in %s", definitions_dir)
@@ -164,10 +165,9 @@ class GithubRepoWrapper:
         # Adjust endpoints with potential parent-children relationships
         endpoints_list = self.parent_children(endpoints_list)
 
-        # Save endpoints to a YAML file
-        self._save_to_yaml(endpoints_list)
-
         self._delete_repo()
+
+        return endpoints_list
 
     def parent_children(
         self, endpoints_list: list[dict[str, str]]
@@ -280,20 +280,3 @@ class GithubRepoWrapper:
             shutil.rmtree(self.clone_dir)
         self.logger.info("Deleted repository")
 
-    def _save_to_yaml(self, data: list[dict[str, Any]]) -> None:
-        """
-        Saves the given data to a YAML file named 'endpoints_{solution}.yaml'.
-
-        Args:
-            data (list): The data to be saved into the YAML file.
-
-        This method does not return any value.
-        """
-        filename = f"endpoints_{self.solution}.yaml"
-        try:
-            with open(filename, "w", encoding="utf-8") as f:
-                self.yaml.dump(data, f)
-            self.logger.info("Saved endpoints to %s", filename)
-        except Exception as e:
-            self.logger.error("Failed to save YAML file %s: %s", filename, str(e))
-            raise

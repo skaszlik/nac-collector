@@ -15,9 +15,8 @@ from nac_collector.cisco_client_fmc import CiscoClientFMC
 from nac_collector.cisco_client_ise import CiscoClientISE
 from nac_collector.cisco_client_ndo import CiscoClientNDO
 from nac_collector.cisco_client_sdwan import CiscoClientSDWAN
-from nac_collector.constants import GIT_TMP, MAX_RETRIES, RETRY_AFTER, TIMEOUT
-from nac_collector.github_repo_wrapper import GithubRepoWrapper
-from nac_collector.resource_manager import ResourceManager
+from nac_collector.constants import MAX_RETRIES, RETRY_AFTER, TIMEOUT
+from nac_collector.endpoint_resolver import EndpointResolver
 
 console = Console()
 logger = logging.getLogger("main")
@@ -153,27 +152,16 @@ def main(
         )
         raise typer.Exit(1)
 
-    # Resolve endpoint file using fallback chain
-    endpoints_yaml_file = ResourceManager.resolve_endpoint_file(
+    # Resolve endpoint data using centralized resolver
+    endpoints_data = EndpointResolver.resolve_endpoint_data(
         solution=solution.value.lower(),
         explicit_file=endpoints_file,
         use_git_provider=git_provider,
     )
 
-    if endpoints_yaml_file is None and git_provider:
-        # Git provider mode - fetch endpoints from GitHub
-        wrapper = GithubRepoWrapper(
-            repo_url=f"https://github.com/CiscoDevNet/terraform-provider-{solution.value.lower()}.git",
-            clone_dir=GIT_TMP,
-            solution=solution.value.lower(),
-        )
-        wrapper.get_definitions()
-        # After git provider runs, the file should be available in current directory
-        endpoints_yaml_file = f"endpoints_{solution.value.lower()}.yaml"
-
-    if endpoints_yaml_file is None:
+    if endpoints_data is None:
         console.print(
-            f"[red]No endpoint file found for solution: {solution.value}[/red]"
+            f"[red]No endpoint data found for solution: {solution.value}[/red]"
         )
         console.print("[yellow]Available options:[/yellow]")
         console.print("1. Use --endpoints-file to specify a custom file")
@@ -210,7 +198,8 @@ def main(
             console.print("[red]Authentication failed. Exiting...[/red]")
             raise typer.Exit(1)
 
-        final_dict = client.get_from_endpoints(endpoints_yaml_file)
+        # Use resolved endpoint data
+        final_dict = client.get_from_endpoints_data(endpoints_data)
         client.write_to_json(final_dict, output_file)
 
     # Record the stop time

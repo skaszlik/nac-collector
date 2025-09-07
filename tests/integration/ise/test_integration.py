@@ -92,12 +92,14 @@ def test_cisco_client_ise_with_integration(
         else:
             raise ValueError(f"Unexpected URL in mock_get_request: {url}")
 
+    # Load endpoints from the YAML file
+    with open("tests/integration/ise/fixtures/endpoints.yaml", encoding="utf-8") as f:
+        endpoints_data = cisco_client.yaml.load(f)
+
     # Patching get_request method with mock implementation
     with patch.object(cisco_client, "get_request", side_effect=mock_get_request):
         # Call the method to test
-        final_dict: dict[str, Any] = cisco_client.get_from_endpoints(
-            "tests/integration/ise/fixtures/endpoints.yaml"
-        )
+        final_dict: dict[str, Any] = cisco_client.get_from_endpoints_data(endpoints_data)
 
         # Write final_dict to a temporary JSON file
         output_file: Any = tmpdir.join("ise.json")

@@ -146,28 +146,22 @@ class CiscoClientFMC(CiscoClient):
 
         return endpoint_dict  # Return the processed endpoint dictionary
 
-    def get_from_endpoints(self, endpoints_yaml_file: str) -> dict[str, Any]:
+
+    def get_from_endpoints_data(self, endpoints_data: list[dict[str, Any]]) -> dict[str, Any]:
         """
-        Retrieve data from a list of endpoints specified in a YAML file and
-        run GET requests to download data from controller.
+        Retrieve data from a list of endpoint definitions provided as data structure.
 
         Parameters:
-            endpoints_yaml_file (str): The name of the YAML file containing the endpoints.
+            endpoints_data (list[dict[str, Any]]): List of endpoint definitions with name and endpoint keys.
 
         Returns:
             dict: The final dictionary containing the data retrieved from the endpoints.
         """
-
-        # Load endpoints from the YAML file
-        logger.info("Loading endpoints from %s", endpoints_yaml_file)
-        with open(endpoints_yaml_file, encoding="utf-8") as f:
-            endpoints = self.yaml.load(f)
-
         # Initialize an empty dictionary
         final_dict = {}
 
         # Recreate endpoints per-domain
-        endpoints = self.resolve_domains(endpoints, self.domains)
+        endpoints = self.resolve_domains(endpoints_data, self.domains)
 
         # Iterate over all endpoints
         with Progress(
