@@ -25,13 +25,13 @@ class EndpointResolver:
 
         Fallback order:
         1. Explicit --endpoints-file argument
-        2. Git provider mode (fetch from GitHub)
+        2. Fetch latest mode (fetch from upstream sources)
         3. Packaged resource
 
         Args:
             solution: The solution name
             explicit_file: Explicitly provided file path
-            use_git_provider: Whether git provider mode is enabled
+            use_git_provider: Whether to fetch latest from upstream sources
 
         Returns:
             List of endpoint definitions, or None if no source available
@@ -45,9 +45,9 @@ class EndpointResolver:
                 logger.warning("Explicit endpoint file not found: %s", explicit_file)
                 # Continue to fallback options
 
-        # 2. Git provider mode - fetch from GitHub
+        # 2. Fetch latest mode - fetch from upstream sources
         if use_git_provider:
-            logger.info("Using git provider mode for solution: %s", solution)
+            logger.info("Fetching latest endpoint data for solution: %s", solution)
             return EndpointResolver._load_from_git_provider(solution)
 
         # 3. Packaged resource
@@ -74,7 +74,7 @@ class EndpointResolver:
 
     @staticmethod
     def _load_from_git_provider(solution: str) -> list[dict[str, Any]] | None:
-        """Load endpoint data from git provider."""
+        """Load endpoint data from upstream sources."""
         try:
             wrapper = GithubRepoWrapper(
                 repo_url=f"https://github.com/CiscoDevNet/terraform-provider-{solution.lower()}.git",
@@ -82,10 +82,10 @@ class EndpointResolver:
                 solution=solution.lower(),
             )
             data = wrapper.get_definitions()
-            logger.debug("Loaded endpoint data from git provider for: %s", solution)
+            logger.debug("Loaded endpoint data from upstream for: %s", solution)
             return data
         except Exception as e:
             logger.error(
-                "Failed to load endpoint data from git provider for %s: %s", solution, e
+                "Failed to load endpoint data from upstream for %s: %s", solution, e
             )
             return None

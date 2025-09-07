@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from nac_collector.constants import GIT_TMP
 from nac_collector.github_repo_wrapper import GithubRepoWrapper
 
-# Solutions that support git provider mode
+# Solutions that support fetching from upstream sources
 # NDO is excluded as it has a different repository structure
 SUPPORTED_SOLUTIONS = ["catalystcenter", "fmc", "ise", "sdwan"]
 

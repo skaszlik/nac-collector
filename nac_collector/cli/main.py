@@ -111,12 +111,12 @@ def main(
         LogLevel,
         typer.Option("-v", "--verbosity", help="Log level"),
     ] = LogLevel.WARNING,
-    git_provider: Annotated[
+    fetch_latest: Annotated[
         bool,
         typer.Option(
-            "-g",
-            "--git-provider",
-            help="Generate endpoint.yaml automatically from provider GitHub repo",
+            "-f",
+            "--fetch-latest",
+            help="Fetch the latest endpoint definitions from upstream sources",
         ),
     ] = False,
     endpoints_file: Annotated[
@@ -146,9 +146,9 @@ def main(
     configure_logging(verbosity)
 
     # Check for incompatible option combinations
-    if git_provider and solution == Solution.NDO:
+    if fetch_latest and solution == Solution.NDO:
         console.print(
-            "[red]--git-provider option is not supported with NDO solution. The NDO solution uses a different repository structure that is incompatible with the git provider functionality.[/red]"
+            "[red]--fetch-latest option is not supported with NDO solution. The NDO solution uses a different repository structure that is incompatible with fetching from upstream.[/red]"
         )
         raise typer.Exit(1)
 
@@ -156,7 +156,7 @@ def main(
     endpoints_data = EndpointResolver.resolve_endpoint_data(
         solution=solution.value.lower(),
         explicit_file=endpoints_file,
-        use_git_provider=git_provider,
+        use_git_provider=fetch_latest,
     )
 
     if endpoints_data is None:
@@ -165,7 +165,7 @@ def main(
         )
         console.print("[yellow]Available options:[/yellow]")
         console.print("1. Use --endpoints-file to specify a custom file")
-        console.print("2. Use --git-provider to fetch from GitHub")
+        console.print("2. Use --fetch-latest to fetch from upstream sources")
         console.print("3. Ensure packaged resources are available")
         raise typer.Exit(1)
     output_file = output or f"{solution.value.lower()}.json"

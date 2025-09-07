@@ -37,8 +37,8 @@ Options:
                         [env var: NAC_URL]
   -v, --verbosity [CRITICAL|ERROR|WARNING|INFO|DEBUG]
                         Log level [default: WARNING]
-  -g, --git-provider    Generate endpoint.yaml automatically from
-                        provider GitHub repo
+  -f, --fetch-latest    Fetch the latest endpoint definitions from
+                        upstream sources
   -e, --endpoints-file TEXT
                         Path to the endpoints YAML file
   -t, --timeout INTEGER
@@ -64,36 +64,36 @@ Using uv (development):
 
 ```sh
 # With environment variables
-uv run nac-collector -s SDWAN -v DEBUG --git-provider
+uv run nac-collector -s SDWAN -v DEBUG --fetch-latest
 
 # Without environment variables
-uv run nac-collector -s SDWAN --username USERNAME --password PASSWORD --url URL -v DEBUG --git-provider
+uv run nac-collector -s SDWAN --username USERNAME --password PASSWORD --url URL -v DEBUG --fetch-latest
 ```
 
 Using installed package:
 
 ```sh
-nac-collector -s SDWAN -v DEBUG --git-provider
+nac-collector -s SDWAN -v DEBUG --fetch-latest
 ```
 
 ### ISE
 
 ```sh
 # With environment variables
-nac-collector -s ISE -v DEBUG --git-provider
+nac-collector -s ISE -v DEBUG --fetch-latest
 
 # Without environment variables
-nac-collector -s ISE --username USERNAME --password PASSWORD --url URL -v DEBUG --git-provider
+nac-collector -s ISE --username USERNAME --password PASSWORD --url URL -v DEBUG --fetch-latest
 ```
 
 ### Catalyst Center
 
 ```sh
 # With environment variables
-nac-collector -s CATALYSTCENTER -v DEBUG --git-provider
+nac-collector -s CATALYSTCENTER -v DEBUG --fetch-latest
 
 # Without environment variables
-nac-collector -s CATALYSTCENTER --username USERNAME --password PASSWORD --url URL -v DEBUG --git-provider
+nac-collector -s CATALYSTCENTER --username USERNAME --password PASSWORD --url URL -v DEBUG --fetch-latest
 ```
 
 Catalyst Center contains some custom logic, explained in [README_catalyst_center.md](README_catalyst_center.md).
