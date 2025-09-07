@@ -59,7 +59,7 @@ jobs:
         id: check_changes
         run: |
           # Check if there are any changes to the endpoint files
-          if git diff --quiet nac_collector/resources/endpoints/*.yaml; then
+          if git diff --quiet nac_collector/resources/endpoints/*.yaml 2>/dev/null; then
             echo "No changes detected in endpoint files"
             echo "has_changes=false" >> $GITHUB_OUTPUT
           else
@@ -83,6 +83,7 @@ jobs:
             echo "### Change statistics:"
             git diff --stat nac_collector/resources/endpoints/*.yaml
             echo ""
+          fi
 
       - name: Create Pull Request
         if: steps.check_changes.outputs.has_changes == 'true'
