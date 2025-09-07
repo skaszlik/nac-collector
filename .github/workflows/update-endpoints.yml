@@ -83,26 +83,6 @@ jobs:
             echo "### Change statistics:"
             git diff --stat nac_collector/resources/endpoints/*.yaml
             echo ""
-            
-            # Show detailed changes for each file
-            echo "### Detailed changes:"
-            for file in $(git diff --name-only nac_collector/resources/endpoints/*.yaml); do
-              echo ""
-              echo "#### $(basename $file):"
-              # Show number of additions and deletions
-              STATS=$(git diff --numstat $file)
-              ADDED=$(echo $STATS | awk '{print $1}')
-              DELETED=$(echo $STATS | awk '{print $2}')
-              echo "- Lines added: $ADDED"
-              echo "- Lines removed: $DELETED"
-              
-              # Show a brief summary of what changed (first 10 lines of diff)
-              echo "- Preview of changes:"
-              echo '```diff'
-              git diff --no-index --no-prefix $file | head -20 || true
-              echo '```'
-            done
-          fi
 
       - name: Create Pull Request
         if: steps.check_changes.outputs.has_changes == 'true'
