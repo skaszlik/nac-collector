@@ -279,4 +279,3 @@ class GithubRepoWrapper:
             # Delete the directory and its contents
             shutil.rmtree(self.clone_dir)
         self.logger.info("Deleted repository")
-

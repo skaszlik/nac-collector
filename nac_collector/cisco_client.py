@@ -58,7 +58,9 @@ class CiscoClient(ABC):
         """
 
     @abstractmethod
-    def get_from_endpoints_data(self, endpoints_data: list[dict[str, Any]]) -> dict[str, Any]:
+    def get_from_endpoints_data(
+        self, endpoints_data: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         """
         Abstract method to get data from endpoints provided as a data structure.
 

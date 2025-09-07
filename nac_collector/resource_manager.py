@@ -103,4 +103,3 @@ class ResourceManager:
         except (ImportError, AttributeError) as e:
             logger.debug("Failed to list available solutions: %s", e)
             return []
-

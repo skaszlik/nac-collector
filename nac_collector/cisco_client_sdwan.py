@@ -85,8 +85,9 @@ class CiscoClientSDWAN(CiscoClient):
         )
         return False
 
-
-    def get_from_endpoints_data(self, endpoints_data: list[dict[str, Any]]) -> dict[str, Any]:
+    def get_from_endpoints_data(
+        self, endpoints_data: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         """
         Retrieve data from a list of endpoint definitions provided as data structure.
 

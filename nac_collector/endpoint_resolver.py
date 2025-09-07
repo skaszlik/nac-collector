@@ -85,5 +85,7 @@ class EndpointResolver:
             logger.debug("Loaded endpoint data from git provider for: %s", solution)
             return data
         except Exception as e:
-            logger.error("Failed to load endpoint data from git provider for %s: %s", solution, e)
+            logger.error(
+                "Failed to load endpoint data from git provider for %s: %s", solution, e
+            )
             return None

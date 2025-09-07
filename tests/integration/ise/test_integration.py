@@ -99,7 +99,9 @@ def test_cisco_client_ise_with_integration(
     # Patching get_request method with mock implementation
     with patch.object(cisco_client, "get_request", side_effect=mock_get_request):
         # Call the method to test
-        final_dict: dict[str, Any] = cisco_client.get_from_endpoints_data(endpoints_data)
+        final_dict: dict[str, Any] = cisco_client.get_from_endpoints_data(
+            endpoints_data
+        )
 
         # Write final_dict to a temporary JSON file
         output_file: Any = tmpdir.join("ise.json")
