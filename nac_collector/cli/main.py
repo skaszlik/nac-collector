@@ -3,7 +3,6 @@ import time
 from enum import Enum
 from typing import Annotated
 
-import errorhandler
 import typer
 from rich.console import Console
 from rich.logging import RichHandler
@@ -20,7 +19,7 @@ from nac_collector.endpoint_resolver import EndpointResolver
 
 console = Console()
 logger = logging.getLogger("main")
-error_handler = errorhandler.ErrorHandler()
+error_occurred = False
 
 
 class LogLevel(str, Enum):
@@ -31,6 +30,16 @@ class LogLevel(str, Enum):
     WARNING = "WARNING"
     INFO = "INFO"
     DEBUG = "DEBUG"
+
+
+class ErrorTrackingHandler(logging.Handler):
+    """Custom handler to track if errors occurred."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        """Set error flag if error or critical log is emitted."""
+        global error_occurred
+        if record.levelno >= logging.ERROR:
+            error_occurred = True
 
 
 class Solution(str, Enum):
@@ -45,6 +54,9 @@ class Solution(str, Enum):
 
 def configure_logging(level: LogLevel) -> None:
     """Configure logging with Rich handler."""
+    global error_occurred
+    error_occurred = False  # Reset error flag
+
     level_map = {
         LogLevel.DEBUG: logging.DEBUG,
         LogLevel.INFO: logging.INFO,
@@ -61,8 +73,13 @@ def configure_logging(level: LogLevel) -> None:
     handler = RichHandler(console=console, show_time=True, show_path=False)
     handler.setFormatter(logging.Formatter("%(message)s"))
     root_logger.addHandler(handler)
+
+    # Add error tracking handler
+    error_tracker = ErrorTrackingHandler()
+    error_tracker.setLevel(logging.ERROR)
+    root_logger.addHandler(error_tracker)
+
     root_logger.setLevel(level_map[level])
-    error_handler.reset()
 
 
 def version_callback(value: bool) -> None:
@@ -213,8 +230,9 @@ def main(
 
 
 def exit_app() -> None:
-    """Exit the application based on error handler state."""
-    if error_handler.fired:
+    """Exit the application with appropriate exit code."""
+    global error_occurred
+    if error_occurred:
         raise typer.Exit(1)
     else:
         raise typer.Exit(0)
