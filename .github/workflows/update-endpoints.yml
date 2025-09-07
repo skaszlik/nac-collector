@@ -63,12 +63,45 @@ jobs:
             echo "No changes detected in endpoint files"
             echo "has_changes=false" >> $GITHUB_OUTPUT
           else
-            echo "Changes detected in endpoint files"
             echo "has_changes=true" >> $GITHUB_OUTPUT
+            
+            echo "## 📝 Changes detected in endpoint files:"
+            echo ""
             
             # Get list of changed files for PR description
             CHANGED_FILES=$(git diff --name-only nac_collector/resources/endpoints/*.yaml | xargs -I {} basename {} | tr '\n' ',' | sed 's/,$//')
             echo "changed_files=${CHANGED_FILES}" >> $GITHUB_OUTPUT
+            
+            # Show which files changed
+            echo "### Modified files:"
+            git diff --name-only nac_collector/resources/endpoints/*.yaml | while read file; do
+              echo "- $(basename $file)"
+            done
+            echo ""
+            
+            # Show summary statistics for each file
+            echo "### Change statistics:"
+            git diff --stat nac_collector/resources/endpoints/*.yaml
+            echo ""
+            
+            # Show detailed changes for each file
+            echo "### Detailed changes:"
+            for file in $(git diff --name-only nac_collector/resources/endpoints/*.yaml); do
+              echo ""
+              echo "#### $(basename $file):"
+              # Show number of additions and deletions
+              STATS=$(git diff --numstat $file)
+              ADDED=$(echo $STATS | awk '{print $1}')
+              DELETED=$(echo $STATS | awk '{print $2}')
+              echo "- Lines added: $ADDED"
+              echo "- Lines removed: $DELETED"
+              
+              # Show a brief summary of what changed (first 10 lines of diff)
+              echo "- Preview of changes:"
+              echo '```diff'
+              git diff --no-index --no-prefix $file | head -20 || true
+              echo '```'
+            done
           fi
 
       - name: Create Pull Request
@@ -78,7 +111,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: |
-            chore: update endpoint definitions from terraform providers
+            Update endpoint definitions from terraform providers
             
             Automated update of endpoint definition files from the latest
             terraform provider repositories.
@@ -86,7 +119,7 @@ jobs:
             Updated files: ${{ steps.check_changes.outputs.changed_files }}
           branch: automated/update-endpoints-${{ github.run_number }}
           delete-branch: true
-          title: 'chore: update endpoint definitions from terraform providers'
+          title: 'Update endpoint definitions from terraform providers'
           body: |
             ## 🤖 Automated Endpoint Update
             
@@ -109,7 +142,6 @@ jobs:
           labels: |
             dependencies
             automated
-            chore
           assignees: ''
           reviewers: ''
 
@@ -117,7 +149,7 @@ jobs:
         if: steps.create_pr.outputs.pull-request-number
         run: |
           echo "Enabling auto-merge for PR #${{ steps.create_pr.outputs.pull-request-number }}"
-          gh pr merge ${{ steps.create_pr.outputs.pull-request-number }} --auto --merge
+          gh pr merge ${{ steps.create_pr.outputs.pull-request-number }} --auto --squash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
