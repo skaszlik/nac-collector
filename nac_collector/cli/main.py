@@ -8,14 +8,14 @@ from rich.console import Console
 from rich.logging import RichHandler
 
 import nac_collector
-from nac_collector.cisco_client import CiscoClient
-from nac_collector.cisco_client_catalystcenter import CiscoClientCATALYSTCENTER
-from nac_collector.cisco_client_fmc import CiscoClientFMC
-from nac_collector.cisco_client_ios_xe import CiscoClientIOSXE
-from nac_collector.cisco_client_ise import CiscoClientISE
-from nac_collector.cisco_client_ndo import CiscoClientNDO
-from nac_collector.cisco_client_sdwan import CiscoClientSDWAN
 from nac_collector.constants import MAX_RETRIES, RETRY_AFTER, TIMEOUT
+from nac_collector.controller.base import CiscoClientController
+from nac_collector.controller.catalystcenter import CiscoClientCATALYSTCENTER
+from nac_collector.controller.fmc import CiscoClientFMC
+from nac_collector.controller.ise import CiscoClientISE
+from nac_collector.controller.ndo import CiscoClientNDO
+from nac_collector.controller.sdwan import CiscoClientSDWAN
+from nac_collector.device.ios_xe import CiscoClientIOSXE
 from nac_collector.device_inventory import load_devices_from_file
 from nac_collector.endpoint_resolver import EndpointResolver
 
@@ -242,7 +242,7 @@ def main(
             console.print("3. Ensure packaged resources are available")
             raise typer.Exit(1)
 
-        cisco_client_class: type[CiscoClient] | None = None
+        cisco_client_class: type[CiscoClientController] | None = None
         if solution == Solution.SDWAN:
             cisco_client_class = CiscoClientSDWAN
         elif solution == Solution.ISE:

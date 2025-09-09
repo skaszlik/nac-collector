@@ -2,7 +2,7 @@ from typing import Any
 
 import httpx
 
-from nac_collector.cisco_client_device import CiscoClientDevice
+from nac_collector.device.base import CiscoClientDevice
 
 
 class CiscoClientIOSXE(CiscoClientDevice):

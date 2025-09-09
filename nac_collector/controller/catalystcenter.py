@@ -15,15 +15,15 @@ from rich.progress import (
 )
 from tinydb import Query, TinyDB
 
-from nac_collector.cisco_client import CiscoClient
+from nac_collector.controller.base import CiscoClientController
 from nac_collector.resource_manager import ResourceManager
 
 logger = logging.getLogger("main")
 
 
-class CiscoClientCATALYSTCENTER(CiscoClient):
+class CiscoClientCATALYSTCENTER(CiscoClientController):
     """
-    This class inherits from the abstract class CiscoClient. It's used for authenticating
+    This class inherits from the abstract class CiscoClientController. It's used for authenticating
     with the Cisco Catalyst Center API and retrieving data from various endpoints.
     Authentication is username/password based and a session is created upon successful
     authentication for subsequent requests.
@@ -361,7 +361,7 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
 
         logger.info("Processing endpoint: %s", endpoint["name"])
 
-        endpoint_dict = CiscoClient.create_endpoint_dict(endpoint)
+        endpoint_dict = CiscoClientController.create_endpoint_dict(endpoint)
         endpoint_key = endpoint.get("endpoint")
         if endpoint_key and endpoint_key in self.id_lookup:
             logger.info(
@@ -423,7 +423,9 @@ class CiscoClientCATALYSTCENTER(CiscoClient):
                     parent_ids = [self.global_site_id]
 
                 for parent_id in parent_ids:
-                    child_dict = CiscoClient.create_endpoint_dict(children_endpoint)
+                    child_dict = CiscoClientController.create_endpoint_dict(
+                        children_endpoint
+                    )
 
                     joined_endpoint = f"{endpoint['endpoint']}/{parent_id}{children_endpoint['endpoint']}"
                     data = self.fetch_data_pagination(joined_endpoint)

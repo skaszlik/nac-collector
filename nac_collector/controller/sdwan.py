@@ -3,14 +3,14 @@ from typing import Any
 
 import httpx
 
-from nac_collector.cisco_client import CiscoClient
+from nac_collector.controller.base import CiscoClientController
 
 logger = logging.getLogger("main")
 
 
-class CiscoClientSDWAN(CiscoClient):
+class CiscoClientSDWAN(CiscoClientController):
     """
-    This class inherits from the abstract class CiscoClient. It's used for authenticating with the Cisco SD-WAN API
+    This class inherits from the abstract class CiscoClientController. It's used for authenticating with the Cisco SD-WAN API
     and retrieving data from various endpoints. Authentication is token-based and a session is created upon successful
     authentication for subsequent requests.
     """
@@ -102,7 +102,7 @@ class CiscoClientSDWAN(CiscoClient):
 
         # Iterate through the endpoints
         for endpoint in endpoints_data:
-            endpoint_dict = CiscoClient.create_endpoint_dict(endpoint)
+            endpoint_dict = CiscoClientController.create_endpoint_dict(endpoint)
 
             if all(
                 x not in endpoint["endpoint"]
@@ -190,7 +190,7 @@ class CiscoClientSDWAN(CiscoClient):
 
             # resolve feature templates
             elif "%i" in endpoint["endpoint"]:
-                endpoint_dict = CiscoClient.create_endpoint_dict(endpoint)
+                endpoint_dict = CiscoClientController.create_endpoint_dict(endpoint)
                 new_endpoint = endpoint["endpoint"].replace(
                     "/object/%i", ""
                 )  # Replace '/object/%i' with ''

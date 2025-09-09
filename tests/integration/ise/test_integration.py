@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 # from nac_collector.main import cli
-from nac_collector.cisco_client_ise import CiscoClientISE
+from nac_collector.controller.ise import CiscoClientISE
 
 pytestmark = pytest.mark.integration
 

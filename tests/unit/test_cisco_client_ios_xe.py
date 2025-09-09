@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-from nac_collector.cisco_client_ios_xe import CiscoClientIOSXE
+from nac_collector.device.ios_xe import CiscoClientIOSXE
 
 pytestmark = pytest.mark.unit
 

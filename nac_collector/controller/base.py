@@ -9,9 +9,9 @@ import httpx
 from ruamel.yaml import YAML
 
 
-class CiscoClient(ABC):
+class CiscoClientController(ABC):
     """
-    Abstract Base Class for a CiscoClient instance.
+    Abstract Base Class for a CiscoClientController instance.
     This class should be subclassed and not instantiated directly.
 
     Parameters:

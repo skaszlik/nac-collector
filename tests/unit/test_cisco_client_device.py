@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from nac_collector.cisco_client_device import CiscoClientDevice
+from nac_collector.device.base import CiscoClientDevice
 
 pytestmark = pytest.mark.unit
 

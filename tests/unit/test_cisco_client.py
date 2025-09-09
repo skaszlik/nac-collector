@@ -5,12 +5,12 @@ import httpx
 import pytest
 from ruamel.yaml import YAML
 
-from nac_collector.cisco_client import CiscoClient
+from nac_collector.controller.base import CiscoClientController
 
 pytestmark = pytest.mark.unit
 
 
-class ConcreteCiscoClient(CiscoClient):
+class ConcreteCiscoClient(CiscoClientController):
     """Concrete implementation of CiscoClient for testing purposes."""
 
     def authenticate(self):
@@ -72,7 +72,7 @@ class TestCiscoClientInitialization:
 
     def test_abstract_methods_raise_not_implemented(self):
         with pytest.raises(TypeError, match="Can't instantiate abstract class"):
-            CiscoClient(  # type: ignore[abstract]
+            CiscoClientController(  # type: ignore[abstract]
                 username="user",
                 password="pass",
                 base_url="https://api.example.com",
@@ -433,7 +433,7 @@ class TestCreateEndpointDict:
     def test_create_endpoint_dict(self):
         endpoint = {"name": "test_endpoint", "endpoint": "/api/test"}
 
-        result = CiscoClient.create_endpoint_dict(endpoint)
+        result = CiscoClientController.create_endpoint_dict(endpoint)
 
         assert result == {"test_endpoint": []}
 
@@ -444,5 +444,5 @@ class TestCreateEndpointDict:
         ]
 
         for endpoint in endpoints:
-            result = CiscoClient.create_endpoint_dict(endpoint)
+            result = CiscoClientController.create_endpoint_dict(endpoint)
             assert result == {endpoint["name"]: []}

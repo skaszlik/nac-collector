@@ -3,12 +3,12 @@ from typing import Any
 
 import httpx
 
-from nac_collector.cisco_client import CiscoClient
+from nac_collector.controller.base import CiscoClientController
 
 logger = logging.getLogger("main")
 
 
-class CiscoClientNDO(CiscoClient):
+class CiscoClientNDO(CiscoClientController):
     NDO_AUTH_ENDPOINT = "/login"
     SOLUTION = "ndo"
 
@@ -74,7 +74,7 @@ class CiscoClientNDO(CiscoClient):
 
         for endpoint in endpoints:
             if all(x not in endpoint.get("endpoint", "") for x in ["%v", "%i"]):  # noqa
-                endpoint_dict = CiscoClient.create_endpoint_dict(endpoint)
+                endpoint_dict = CiscoClientController.create_endpoint_dict(endpoint)
                 response = self.get_request(self.base_url + endpoint["endpoint"])  # noqa
                 if response is None:
                     continue
@@ -101,7 +101,7 @@ class CiscoClientNDO(CiscoClient):
                     isinstance(parent_endpoint, dict)
                     and parent_endpoint.get("name") in final_dict
                 ):  # noqa
-                    endpoint_dict = CiscoClient.create_endpoint_dict(endpoint)
+                    endpoint_dict = CiscoClientController.create_endpoint_dict(endpoint)
 
                     r = []
 

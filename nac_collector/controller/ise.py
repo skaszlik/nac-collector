@@ -1,5 +1,3 @@
-import copy
-import json
 import logging
 from typing import Any
 
@@ -12,22 +10,24 @@ from rich.progress import (
     TextColumn,
 )
 
-from nac_collector.cisco_client import CiscoClient
+from nac_collector.controller.base import CiscoClientController
 
 logger = logging.getLogger("main")
 
 
-class CiscoClientFMC(CiscoClient):
+class CiscoClientISE(CiscoClientController):
     """
-    This class inherits from the abstract class CiscoClient. It's used for authenticating
-    with the Cisco FMC API and retrieving data from various endpoints.
-    There is two stage authentication.
-     - username/password is used to obtain authentication token
-     - token is used to authenticate subsequent queries
+    This class inherits from the abstract class CiscoClientController. It's used for authenticating
+    with the Cisco ISE API and retrieving data from various endpoints.
+    Authentication is username/password based and a session is created upon successful
+    authentication for subsequent requests.
     """
 
-    FMC_AUTH_ENDPOINTS = ["/api/fmc_platform/v1/auth/generatetoken"]
-    SOLUTION = "fmc"
+    ISE_AUTH_ENDPOINTS = [
+        "/admin/API/NetworkAccessConfig/ERS",
+        "/admin/API/apiService/get",
+    ]
+    SOLUTION = "ise"
 
     def __init__(
         self,
@@ -42,8 +42,6 @@ class CiscoClientFMC(CiscoClient):
         super().__init__(
             username, password, base_url, max_retries, retry_after, timeout, ssl_verify
         )
-        self.x_auth_refresh_token: str | None = None
-        self.domains: list[str] = []
 
     def authenticate(self) -> bool:
         """
@@ -53,15 +51,23 @@ class CiscoClientFMC(CiscoClient):
             bool: True if authentication is successful, False otherwise.
         """
 
-        for api in self.FMC_AUTH_ENDPOINTS:
+        for api in self.ISE_AUTH_ENDPOINTS:
             auth_url = f"{self.base_url}{api}"
 
-            headers = {
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-            }
+            # Set headers based on auth_url
+            # If it's ERS API, then set up content-type and accept as application/xml
+            if "API/NetworkAccessConfig/ERS" in auth_url:
+                headers = {
+                    "Content-Type": "application/xml",
+                    "Accept": "application/xml",
+                }
+            else:
+                headers = {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                }
 
-            response = httpx.post(
+            response = httpx.get(
                 auth_url,
                 auth=(self.username, self.password),
                 headers=headers,
@@ -69,32 +75,18 @@ class CiscoClientFMC(CiscoClient):
                 timeout=self.timeout,
             )
 
-            if response and response.status_code == 204:
+            if response and response.status_code == 200:
                 logger.info("Authentication Successful for URL: %s", auth_url)
                 # Create a client after successful authentication
                 self.client = httpx.Client(
+                    auth=(self.username, self.password),
                     verify=self.ssl_verify,
                     timeout=self.timeout,
                 )
+                self.client.headers.update(headers)
                 self.client.headers.update(
-                    {
-                        "Content-Type": "application/json",
-                        "Accept": "application/json",
-                        "X-auth-access-token": response.headers.get(
-                            "X-auth-access-token", ""
-                        ),
-                    }
+                    {"Content-Type": "application/json", "Accept": "application/json"}
                 )
-                self.x_auth_refresh_token = response.headers.get("X-auth-refresh-token")
-
-                # Save a list of UUIDs of all available domains
-                domains_header = response.headers.get("DOMAINS")
-                if domains_header:
-                    self.domains = [
-                        x["uuid"]
-                        for x in json.loads(domains_header)
-                        if isinstance(x, dict) and "uuid" in x
-                    ]
                 return True
 
             logger.error(
@@ -128,21 +120,36 @@ class CiscoClientFMC(CiscoClient):
                 {"data": {}, "endpoint": endpoint["endpoint"]}
             )
 
+        # License API returns a list of dictionaries
         elif isinstance(data, list):
             endpoint_dict[endpoint["name"]].append(
                 {"data": data, "endpoint": endpoint["endpoint"]}
             )
 
-        elif data.get("items", None):
-            items = data.get("items")
-            if items is not None:
-                for i in items:
+        elif data and data.get("response"):
+            response_items = data.get("response")
+            if response_items:
+                for i in response_items:
                     endpoint_dict[endpoint["name"]].append(
                         {
                             "data": i,
-                            "endpoint": f"{endpoint['endpoint']}/{self.get_id_value(i)}",
+                            "endpoint": endpoint["endpoint"]
+                            + "/"
+                            + self.get_id_value(i),
                         }
                     )
+
+        # Pagination for ERS API results
+        elif data.get("SearchResult"):
+            ers_data = self.process_ers_api_results(data)
+
+            for i in ers_data:
+                endpoint_dict[endpoint["name"]].append(
+                    {
+                        "data": i,
+                        "endpoint": endpoint["endpoint"] + "/" + self.get_id_value(i),
+                    }
+                )
 
         return endpoint_dict  # Return the processed endpoint dictionary
 
@@ -161,9 +168,6 @@ class CiscoClientFMC(CiscoClient):
         # Initialize an empty dictionary
         final_dict = {}
 
-        # Recreate endpoints per-domain
-        endpoints = self.resolve_domains(endpoints_data, self.domains)
-
         # Iterate over all endpoints
         with Progress(
             SpinnerColumn(),
@@ -172,20 +176,22 @@ class CiscoClientFMC(CiscoClient):
             TaskProgressColumn(),
             console=None,
         ) as progress:
-            task = progress.add_task("Processing endpoints", total=len(endpoints))
-            for endpoint in endpoints:
+            task = progress.add_task("Processing endpoints", total=len(endpoints_data))
+            for endpoint in endpoints_data:
                 progress.advance(task)
-                logger.info("Processing endpoint: %s", endpoint)
+                logger.info("Processing endpoint: %s", endpoint["name"])
 
-                endpoint_dict = CiscoClient.create_endpoint_dict(endpoint)
+                endpoint_dict = CiscoClientController.create_endpoint_dict(endpoint)
 
                 data = self.fetch_data(endpoint["endpoint"])
 
+                # Process the endpoint data and get the updated dictionary
                 endpoint_dict = self.process_endpoint_data(
                     endpoint, endpoint_dict, data
                 )
 
                 if endpoint.get("children"):
+                    # Create empty list of parent_endpoint_ids
                     parent_endpoint_ids = []
 
                     for item in endpoint_dict[endpoint["name"]]:
@@ -203,9 +209,12 @@ class CiscoClientFMC(CiscoClient):
                             + children_endpoint["endpoint"],
                         )
 
+                        # Iterate over the parent endpoint ids
                         for id_ in parent_endpoint_ids:
-                            children_endpoint_dict = CiscoClient.create_endpoint_dict(
-                                children_endpoint
+                            children_endpoint_dict = (
+                                CiscoClientController.create_endpoint_dict(
+                                    children_endpoint
+                                )
                             )
 
                             # Replace '%v' in the endpoint with the id
@@ -236,13 +245,46 @@ class CiscoClientFMC(CiscoClient):
                                     ]
 
                 # Save results to dictionary
-                # Due to domain expansion, it may happen that same endpoint["name"] will occur multiple times
-                if endpoint["name"] not in final_dict:
-                    final_dict.update(endpoint_dict)
-                else:
-                    final_dict[endpoint["name"]].extend(endpoint_dict[endpoint["name"]])
-
+                final_dict.update(endpoint_dict)
         return final_dict
+
+    def process_ers_api_results(self, data: dict[str, Any]) -> list[Any]:
+        """
+        Process ERS API results and handle pagination.
+
+        Parameters:
+            data (dict): The data received from the ERS API.
+
+        Returns:
+            ers_data (list): The processed data.
+        """
+        # Pagination for ERS API results
+        paginated_data = data["SearchResult"]["resources"]
+        # Loop through all pages until there are no more pages
+        while data["SearchResult"].get("nextPage"):
+            url = data["SearchResult"]["nextPage"]["href"]
+            # Send a GET request to the URL
+            response = self.get_request(url)
+            if response is None:
+                break
+            # Get the JSON content of the response
+            data = response.json()
+            paginated_data.extend(data["SearchResult"]["resources"])
+
+        # For ERS API retrieve details querying all elements from paginated_data
+        ers_data = []
+        for element in paginated_data:
+            url = element["link"]["href"]
+            response = self.get_request(url)
+            if response is None:
+                continue
+            # Get the JSON content of the response
+            data = response.json()
+
+            for _, value in data.items():
+                ers_data.append(value)
+
+        return ers_data
 
     @staticmethod
     def get_id_value(i: dict[str, Any]) -> str | None:
@@ -256,94 +298,12 @@ class CiscoClientFMC(CiscoClient):
             str or None: The 'id' or 'name' value if it exists, None otherwise.
         """
         try:
-            id_value = i["id"]
+            return str(i["id"])
         except KeyError:
             try:
-                id_value = i["uuid"]
+                return str(i["rule"]["id"])
             except KeyError:
                 try:
-                    id_value = i["name"]
+                    return str(i["name"])
                 except KeyError:
-                    id_value = None
-
-        return str(id_value) if id_value is not None else None
-
-    def fetch_data(
-        self, endpoint: str, expanded: bool = True, limit: int = 1000
-    ) -> dict[str, Any] | None:
-        """
-        Fetches all data from a given endpoint (supports paging)
-
-        Parameters:
-            endpoint (str): Endpoint to collect data from
-            expanded (bool): Download objects in expanded form
-            limit (int): Maximum number of items obtained via single call (<=1000ś)
-
-        Returns:
-            dict: Merged dict with all objects
-        """
-
-        endpoint_url = f"{endpoint}?expanded={expanded}&limit={limit}"
-        output = super().fetch_data(endpoint_url)
-
-        if not output:
-            return None
-
-        if "paging" in output and "next" in output["paging"]:
-            data = {"paging": output["paging"]}
-            while True:
-                next_url_params = data["paging"]["next"][0].split("?")[1]
-                next_data = super().fetch_data(endpoint + "?" + next_url_params)
-                if next_data is None:
-                    break
-                data = next_data
-                output["items"].extend(data["items"])
-                if "next" not in data["paging"]:
-                    break
-
-        # Check if returned data structure has domain information
-        try:
-            output["items"][0]["metadata"]["domain"]["id"]
-        # If it doesn't, return data as is
-        except KeyError:
-            return output
-
-        # If returned data structure has domain information
-        # Filter output by the domain
-        # Child domains will include objects from parent domain, which we need to exclude
-        filtered = {
-            "items": [
-                x for x in output["items"] if x["metadata"]["domain"]["id"] in endpoint
-            ]
-        }
-
-        return filtered
-
-    def resolve_domains(
-        self, endpoints: list[dict[str, Any]], domains: list[str]
-    ) -> list[dict[str, Any]]:
-        """
-        Replace endpoint containing domain reference '{DOMAIN_UUID}' with one per domain.
-
-        Parameters:
-            endpoints (list): List of endpoints
-            domains (list): List of domains' UUIDs
-
-        Returns:
-            list: Per-domain list of endpoints
-        """
-
-        new_endpoints = []
-        for endpoint in endpoints:
-            # Endpoint is NOT domain specific
-            if "{DOMAIN_UUID}" not in endpoint["endpoint"]:
-                new_endpoints.append(copy.deepcopy(endpoint))
-                continue
-
-            # Endpoint is domain specific
-            base_endpoint = endpoint["endpoint"]
-            for domain in domains:
-                endpoint["endpoint"] = base_endpoint.replace("{DOMAIN_UUID}", domain)
-                new_endpoints.append(copy.deepcopy(endpoint))
-
-        return new_endpoints
+                    return None
