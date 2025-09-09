@@ -102,31 +102,31 @@ def main(
         ),
     ],
     username: Annotated[
-        str,
+        str | None,
         typer.Option(
             "-u",
             "--username",
             envvar="NAC_USERNAME",
             help="Username for authentication",
         ),
-    ],
+    ] = None,
     password: Annotated[
-        str,
+        str | None,
         typer.Option(
             "-p",
             "--password",
             envvar="NAC_PASSWORD",
             help="Password for authentication",
         ),
-    ],
+    ] = None,
     url: Annotated[
-        str,
+        str | None,
         typer.Option(
             "--url",
             envvar="NAC_URL",
             help="Base URL for the service",
         ),
-    ],
+    ] = None,
     verbosity: Annotated[
         LogLevel,
         typer.Option("-v", "--verbosity", help="Log level"),
@@ -213,8 +213,8 @@ def main(
         if solution == Solution.IOSXE:
             ios_xe_client = CiscoClientIOSXE(
                 devices=devices,
-                default_username=username,
-                default_password=password,
+                default_username=username or "",
+                default_password=password or "",
                 max_retries=MAX_RETRIES,
                 retry_after=RETRY_AFTER,
                 timeout=timeout,
@@ -253,6 +253,21 @@ def main(
             cisco_client_class = CiscoClientFMC
         elif solution == Solution.CATALYSTCENTER:
             cisco_client_class = CiscoClientCATALYSTCENTER
+
+        # Validate required credentials for controller-based solutions
+        if not username:
+            console.print(
+                "[red]Username is required for controller-based solutions[/red]"
+            )
+            raise typer.Exit(1)
+        if not password:
+            console.print(
+                "[red]Password is required for controller-based solutions[/red]"
+            )
+            raise typer.Exit(1)
+        if not url:
+            console.print("[red]URL is required for controller-based solutions[/red]")
+            raise typer.Exit(1)
 
         if cisco_client_class:
             client = cisco_client_class(

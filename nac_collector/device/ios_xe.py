@@ -15,6 +15,8 @@ class CiscoClientIOSXE(CiscoClientDevice):
     DEFAULT_PROTOCOL = "restconf"
     # Single endpoint to retrieve full configuration
     CONFIG_ENDPOINT = "/restconf/data/Cisco-IOS-XE-native:native"
+    # Increased timeout for /restconf/data requests (120 seconds)
+    RESTCONF_DATA_TIMEOUT = 120
 
     def authenticate_device(self, device: dict[str, Any]) -> bool:
         """
@@ -24,8 +26,8 @@ class CiscoClientIOSXE(CiscoClientDevice):
         username, password = self.get_device_credentials(device)
         url = device.get("url")
 
-        # Test authentication with RESTCONF root endpoint
-        test_url = f"{url}/restconf/data"
+        # Test authentication with root resource discovery endpoint
+        test_url = f"{url}/.well-known/host-meta"
 
         try:
             with httpx.Client(verify=self.ssl_verify) as client:
@@ -71,7 +73,7 @@ class CiscoClientIOSXE(CiscoClientDevice):
             with httpx.Client(
                 verify=self.ssl_verify,
                 auth=(username, password),
-                timeout=self.timeout,
+                timeout=self.RESTCONF_DATA_TIMEOUT,
                 headers={"Accept": "application/yang-data+json"},
             ) as client:
                 self.logger.debug(f"Collecting configuration from {device.get('name')}")
