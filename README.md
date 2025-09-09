@@ -3,7 +3,7 @@
 
 # nac-collector
 
-A CLI tool to collect data from network infrastructure devices and systems.
+A CLI tool to collect data from network infrastructure devices. Supports both controller-based architectures (single controller manages multiple devices) and device-based architectures (direct device connections).
 
 ## Installation
 
@@ -21,19 +21,23 @@ pip install git+https://github.com/netascode/nac-collector.git
 
 ## Usage
 
+The tool supports two types of architectures:
+- **Controller-based**: SDWAN, ISE, NDO, FMC, CATALYSTCENTER (require `--url`)
+- **Device-based**: IOSXE (requires `--devices-file`)
+
 ```
 Usage: nac-collector [OPTIONS]
 
 A CLI tool to collect various network configurations.
 
 Options:
-  * -s, --solution [SDWAN|ISE|NDO|FMC|CATALYSTCENTER]
+  * -s, --solution [SDWAN|ISE|NDO|FMC|CATALYSTCENTER|IOSXE]
                         Solutions supported [required]
   * -u, --username TEXT Username for authentication [required]
                         [env var: NAC_USERNAME]
   * -p, --password TEXT Password for authentication [required]
                         [env var: NAC_PASSWORD]
-  * --url TEXT          Base URL for the service [required]
+  * --url TEXT          Base URL for the service (required for controller-based solutions)
                         [env var: NAC_URL]
   -v, --verbosity [CRITICAL|ERROR|WARNING|INFO|DEBUG]
                         Log level [default: WARNING]
@@ -43,7 +47,8 @@ Options:
                         Path to the endpoints YAML file
   -t, --timeout INTEGER
                         Request timeout in seconds [default: 30]
-  -o, --output TEXT     Path to the output JSON file
+  -o, --output TEXT     Path to the output ZIP file [default: nac-collector.zip]
+  --devices-file TEXT   Path to the device inventory YAML file (for device-based solutions)
   --version             Show version and exit
   --help                Show this message and exit
 ```
@@ -97,3 +102,56 @@ nac-collector -s CATALYSTCENTER --username USERNAME --password PASSWORD --url UR
 ```
 
 Catalyst Center contains some custom logic, explained in [README_catalyst_center.md](README_catalyst_center.md).
+
+### IOSXE (Device-Based Collection)
+
+IOSXE uses a device-based architecture where configuration is collected directly from individual devices using RESTCONF. This requires a device inventory file instead of a single controller URL.
+
+#### Device Inventory File
+
+Create a YAML file with your device inventory:
+
+```yaml
+- name: Switch1
+  url: https://switch1.example.com
+  username: admin
+  password: cisco123
+  protocol: restconf
+- name: Switch2
+  url: https://switch2.example.com
+  # username/password will use CLI defaults if not specified
+- name: Router1
+  url: https://router1.example.com
+  username: router_admin
+  # password will use CLI default
+```
+
+#### Usage Examples
+
+```sh
+# Using device inventory file
+nac-collector -s IOSXE --username admin --password cisco123 --devices-file devices.yaml -v DEBUG
+
+# Using environment variables for default credentials
+export NAC_USERNAME=admin
+export NAC_PASSWORD=cisco123
+nac-collector -s IOSXE --devices-file devices.yaml -v DEBUG
+
+# Custom output file
+nac-collector -s IOSXE --devices-file devices.yaml --output my-collection.zip
+```
+
+#### Output Format
+
+For device-based collection, the output ZIP archive contains individual JSON files for each device:
+
+```
+nac-collector.zip
+├── Switch1.json
+├── Switch2.json
+└── Router1.json
+```
+
+Each JSON file contains the complete RESTCONF configuration data for that device.
+
+**Note:** Device-based solutions like IOSXE do not use endpoint files (`--endpoints-file` and `--fetch-latest` are ignored).

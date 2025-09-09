@@ -1,5 +1,4 @@
 import zipfile
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -14,17 +13,15 @@ pytestmark = pytest.mark.unit
 class ConcreteCiscoClient(CiscoClient):
     """Concrete implementation of CiscoClient for testing purposes."""
 
-    def authenticate(self) -> bool:
+    def authenticate(self):
         return True
 
-    def get_from_endpoints_data(
-        self, endpoints_data: list[dict[str, Any]]
-    ) -> dict[str, Any]:
+    def get_from_endpoints_data(self, endpoints_data):
         return {"test": "data"}
 
 
 @pytest.fixture
-def cisco_client() -> ConcreteCiscoClient:
+def cisco_client():
     return ConcreteCiscoClient(
         username="test_user",
         password="test_password",
@@ -37,12 +34,12 @@ def cisco_client() -> ConcreteCiscoClient:
 
 
 @pytest.fixture
-def mock_httpx_client() -> MagicMock:
+def mock_httpx_client():
     return MagicMock(spec=httpx.Client)
 
 
 class TestCiscoClientInitialization:
-    def test_initialization_with_defaults(self) -> None:
+    def test_initialization_with_defaults(self):
         client = ConcreteCiscoClient(
             username="user",
             password="pass",
@@ -61,7 +58,7 @@ class TestCiscoClientInitialization:
         assert client.client is None
         assert isinstance(client.yaml, YAML)
 
-    def test_initialization_with_ssl_verify(self) -> None:
+    def test_initialization_with_ssl_verify(self):
         client = ConcreteCiscoClient(
             username="user",
             password="pass",
@@ -73,7 +70,7 @@ class TestCiscoClientInitialization:
         )
         assert client.ssl_verify is True
 
-    def test_abstract_methods_raise_not_implemented(self) -> None:
+    def test_abstract_methods_raise_not_implemented(self):
         with pytest.raises(TypeError, match="Can't instantiate abstract class"):
             CiscoClient(  # type: ignore[abstract]
                 username="user",
@@ -86,9 +83,7 @@ class TestCiscoClientInitialization:
 
 
 class TestGetRequest:
-    def test_get_request_success(
-        self, cisco_client: ConcreteCiscoClient, mock_httpx_client: MagicMock
-    ) -> None:
+    def test_get_request_success(self, cisco_client, mock_httpx_client):
         cisco_client.client = mock_httpx_client
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -99,18 +94,14 @@ class TestGetRequest:
         assert result == mock_response
         mock_httpx_client.get.assert_called_once_with("https://example.com/api/test")
 
-    def test_get_request_client_not_initialized(
-        self, cisco_client: ConcreteCiscoClient
-    ) -> None:
+    def test_get_request_client_not_initialized(self, cisco_client):
         cisco_client.client = None
 
         result = cisco_client.get_request("https://example.com/api/test")
 
         assert result is None
 
-    def test_get_request_timeout_exception(
-        self, cisco_client: ConcreteCiscoClient, mock_httpx_client: MagicMock
-    ) -> None:
+    def test_get_request_timeout_exception(self, cisco_client, mock_httpx_client):
         cisco_client.client = mock_httpx_client
         mock_httpx_client.get.side_effect = httpx.TimeoutException("Timeout")
 
@@ -120,8 +111,8 @@ class TestGetRequest:
         assert mock_httpx_client.get.call_count == cisco_client.max_retries
 
     def test_get_request_rate_limited_with_retry_after_header(
-        self, cisco_client: ConcreteCiscoClient, mock_httpx_client: MagicMock
-    ) -> None:
+        self, cisco_client, mock_httpx_client
+    ):
         cisco_client.client = mock_httpx_client
         mock_response_429 = MagicMock()
         mock_response_429.status_code = 429
@@ -140,8 +131,8 @@ class TestGetRequest:
         mock_sleep.assert_called_once_with(5)
 
     def test_get_request_rate_limited_without_retry_after_header(
-        self, cisco_client: ConcreteCiscoClient, mock_httpx_client: MagicMock
-    ) -> None:
+        self, cisco_client, mock_httpx_client
+    ):
         cisco_client.client = mock_httpx_client
         mock_response_429 = MagicMock()
         mock_response_429.status_code = 429
@@ -159,8 +150,8 @@ class TestGetRequest:
         mock_sleep.assert_called_once_with(1)  # Uses default retry_after
 
     def test_get_request_unauthorized_calls_authenticate(
-        self, cisco_client: ConcreteCiscoClient, mock_httpx_client: MagicMock
-    ) -> None:
+        self, cisco_client, mock_httpx_client
+    ):
         cisco_client.client = mock_httpx_client
         mock_response_401 = MagicMock()
         mock_response_401.status_code = 401
@@ -176,9 +167,7 @@ class TestGetRequest:
         assert result == mock_response_200
         mock_auth.assert_called_once()
 
-    def test_get_request_unexpected_status_code(
-        self, cisco_client: ConcreteCiscoClient, mock_httpx_client: MagicMock
-    ) -> None:
+    def test_get_request_unexpected_status_code(self, cisco_client, mock_httpx_client):
         cisco_client.client = mock_httpx_client
         mock_response = MagicMock()
         mock_response.status_code = 500
@@ -188,9 +177,7 @@ class TestGetRequest:
 
         assert result is None
 
-    def test_get_request_max_retries_exceeded(
-        self, cisco_client: ConcreteCiscoClient, mock_httpx_client: MagicMock
-    ) -> None:
+    def test_get_request_max_retries_exceeded(self, cisco_client, mock_httpx_client):
         cisco_client.client = mock_httpx_client
         mock_response = MagicMock()
         mock_response.status_code = 429
@@ -205,9 +192,7 @@ class TestGetRequest:
 
 
 class TestPostRequest:
-    def test_post_request_success(
-        self, cisco_client: ConcreteCiscoClient, mock_httpx_client: MagicMock
-    ) -> None:
+    def test_post_request_success(self, cisco_client, mock_httpx_client):
         cisco_client.client = mock_httpx_client
         mock_response = MagicMock()
         mock_response.status_code = 201
@@ -221,18 +206,14 @@ class TestPostRequest:
             "https://example.com/api/test", data=data
         )
 
-    def test_post_request_client_not_initialized(
-        self, cisco_client: ConcreteCiscoClient
-    ) -> None:
+    def test_post_request_client_not_initialized(self, cisco_client):
         cisco_client.client = None
 
         result = cisco_client.post_request("https://example.com/api/test", {})
 
         assert result is None
 
-    def test_post_request_timeout_exception(
-        self, cisco_client: ConcreteCiscoClient, mock_httpx_client: MagicMock
-    ) -> None:
+    def test_post_request_timeout_exception(self, cisco_client, mock_httpx_client):
         cisco_client.client = mock_httpx_client
         mock_httpx_client.post.side_effect = httpx.TimeoutException("Timeout")
 
@@ -242,9 +223,7 @@ class TestPostRequest:
 
         assert mock_httpx_client.post.call_count == cisco_client.max_retries
 
-    def test_post_request_rate_limited(
-        self, cisco_client: ConcreteCiscoClient, mock_httpx_client: MagicMock
-    ) -> None:
+    def test_post_request_rate_limited(self, cisco_client, mock_httpx_client):
         cisco_client.client = mock_httpx_client
         mock_response_429 = MagicMock()
         mock_response_429.status_code = 429
@@ -261,9 +240,7 @@ class TestPostRequest:
         assert result == mock_response_200
         mock_sleep.assert_called_once_with(3)
 
-    def test_post_request_2xx_success(
-        self, cisco_client: ConcreteCiscoClient, mock_httpx_client: MagicMock
-    ) -> None:
+    def test_post_request_2xx_success(self, cisco_client, mock_httpx_client):
         cisco_client.client = mock_httpx_client
 
         for status_code in [200, 201, 202, 204]:
@@ -275,9 +252,7 @@ class TestPostRequest:
 
             assert result == mock_response
 
-    def test_post_request_unexpected_status_code(
-        self, cisco_client: ConcreteCiscoClient, mock_httpx_client: MagicMock
-    ) -> None:
+    def test_post_request_unexpected_status_code(self, cisco_client, mock_httpx_client):
         cisco_client.client = mock_httpx_client
         mock_response = MagicMock()
         mock_response.status_code = 500
@@ -289,9 +264,7 @@ class TestPostRequest:
 
 
 class TestLogResponse:
-    def test_log_response_success(
-        self, cisco_client: ConcreteCiscoClient, caplog: Any
-    ) -> None:
+    def test_log_response_success(self, cisco_client, caplog):
         with caplog.at_level("INFO"):
             mock_response = MagicMock()
             mock_response.status_code = 200
@@ -300,9 +273,7 @@ class TestLogResponse:
 
             assert "GET /api/test succeeded with status code 200" in caplog.text
 
-    def test_log_response_failure(
-        self, cisco_client: ConcreteCiscoClient, caplog: Any
-    ) -> None:
+    def test_log_response_failure(self, cisco_client, caplog):
         with caplog.at_level("ERROR"):
             mock_response = MagicMock()
             mock_response.status_code = 404
@@ -313,7 +284,7 @@ class TestLogResponse:
 
 
 class TestFetchData:
-    def test_fetch_data_success(self, cisco_client: ConcreteCiscoClient) -> None:
+    def test_fetch_data_success(self, cisco_client):
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"key": "value"}
@@ -323,15 +294,13 @@ class TestFetchData:
 
         assert result == {"key": "value"}
 
-    def test_fetch_data_no_response(self, cisco_client: ConcreteCiscoClient) -> None:
+    def test_fetch_data_no_response(self, cisco_client):
         with patch.object(cisco_client, "get_request", return_value=None):
             result = cisco_client.fetch_data("/api/test")
 
         assert result is None
 
-    def test_fetch_data_json_decode_error(
-        self, cisco_client: ConcreteCiscoClient
-    ) -> None:
+    def test_fetch_data_json_decode_error(self, cisco_client):
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.side_effect = ValueError("Invalid JSON")
@@ -341,9 +310,7 @@ class TestFetchData:
 
         assert result is None
 
-    def test_fetch_data_non_dict_response(
-        self, cisco_client: ConcreteCiscoClient
-    ) -> None:
+    def test_fetch_data_non_dict_response(self, cisco_client):
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = ["item1", "item2"]
@@ -355,9 +322,7 @@ class TestFetchData:
 
 
 class TestFetchDataPagination:
-    def test_fetch_data_pagination_single_page(
-        self, cisco_client: ConcreteCiscoClient
-    ) -> None:
+    def test_fetch_data_pagination_single_page(self, cisco_client):
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"response": [{"id": 1}, {"id": 2}]}
@@ -367,9 +332,7 @@ class TestFetchDataPagination:
 
         assert result == {"response": [{"id": 1}, {"id": 2}]}
 
-    def test_fetch_data_pagination_multiple_pages(
-        self, cisco_client: ConcreteCiscoClient
-    ) -> None:
+    def test_fetch_data_pagination_multiple_pages(self, cisco_client):
         mock_response_1 = MagicMock()
         mock_response_1.status_code = 200
         mock_response_1.json.return_value = {
@@ -394,9 +357,7 @@ class TestFetchDataPagination:
         assert result["response"][0]["id"] == 0
         assert result["response"][-1]["id"] == 599
 
-    def test_fetch_data_pagination_no_response_wrapper(
-        self, cisco_client: ConcreteCiscoClient
-    ) -> None:
+    def test_fetch_data_pagination_no_response_wrapper(self, cisco_client):
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = [{"id": 1}, {"id": 2}]
@@ -406,9 +367,7 @@ class TestFetchDataPagination:
 
         assert result == [{"id": 1}, {"id": 2}]
 
-    def test_fetch_data_pagination_single_item_response(
-        self, cisco_client: ConcreteCiscoClient
-    ) -> None:
+    def test_fetch_data_pagination_single_item_response(self, cisco_client):
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"response": {"id": 1, "name": "test"}}
@@ -418,9 +377,7 @@ class TestFetchDataPagination:
 
         assert result == {"response": [{"id": 1, "name": "test"}]}
 
-    def test_fetch_data_pagination_reserve_ip_subpool_endpoint(
-        self, cisco_client: ConcreteCiscoClient
-    ) -> None:
+    def test_fetch_data_pagination_reserve_ip_subpool_endpoint(self, cisco_client):
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"response": [{"id": 1}]}
@@ -434,17 +391,13 @@ class TestFetchDataPagination:
             "https://example.com/dna/intent/api/v1/reserve-ip-subpool"
         )
 
-    def test_fetch_data_pagination_no_response(
-        self, cisco_client: ConcreteCiscoClient
-    ) -> None:
+    def test_fetch_data_pagination_no_response(self, cisco_client):
         with patch.object(cisco_client, "get_request", return_value=None):
             result = cisco_client.fetch_data_pagination("/api/test")
 
         assert result is None
 
-    def test_fetch_data_pagination_json_decode_error(
-        self, cisco_client: ConcreteCiscoClient
-    ) -> None:
+    def test_fetch_data_pagination_json_decode_error(self, cisco_client):
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.side_effect = ValueError("Invalid JSON")
@@ -456,7 +409,7 @@ class TestFetchDataPagination:
 
 
 class TestWriteToArchive:
-    def test_write_to_archive(self, cisco_client: ConcreteCiscoClient) -> None:
+    def test_write_to_archive(self, cisco_client):
         test_data = {"key": "value", "number": 42}
 
         with patch("zipfile.ZipFile") as mock_zipfile:
@@ -477,14 +430,14 @@ class TestWriteToArchive:
 
 
 class TestCreateEndpointDict:
-    def test_create_endpoint_dict(self) -> None:
+    def test_create_endpoint_dict(self):
         endpoint = {"name": "test_endpoint", "endpoint": "/api/test"}
 
         result = CiscoClient.create_endpoint_dict(endpoint)
 
         assert result == {"test_endpoint": []}
 
-    def test_create_endpoint_dict_different_names(self) -> None:
+    def test_create_endpoint_dict_different_names(self):
         endpoints = [
             {"name": "users", "endpoint": "/api/users"},
             {"name": "devices", "endpoint": "/api/devices"},

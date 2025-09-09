@@ -1,5 +1,4 @@
 import json
-from typing import Any
 from unittest.mock import Mock, patch
 
 import pytest
@@ -11,7 +10,7 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.fixture
-def cisco_client() -> CiscoClientISE:
+def cisco_client():
     return CiscoClientISE(
         username="test_user",
         password="test_password",
@@ -23,12 +22,10 @@ def cisco_client() -> CiscoClientISE:
     )
 
 
-def test_cisco_client_ise_with_integration(
-    cisco_client: CiscoClientISE, tmpdir: Any
-) -> None:
-    def mock_get_request(url: str) -> Mock:
+def test_cisco_client_ise_with_integration(cisco_client, tmpdir):
+    def mock_get_request(url):
         # Mock responses for specific API endpoints
-        mock_responses: dict[str, dict[str, Any]] = {
+        mock_responses = {
             "https://example.com/api/endpoint_1": {
                 "response": [
                     {
@@ -99,24 +96,22 @@ def test_cisco_client_ise_with_integration(
     # Patching get_request method with mock implementation
     with patch.object(cisco_client, "get_request", side_effect=mock_get_request):
         # Call the method to test
-        final_dict: dict[str, Any] = cisco_client.get_from_endpoints_data(
-            endpoints_data
-        )
+        final_dict = cisco_client.get_from_endpoints_data(endpoints_data)
 
         # Write final_dict to a temporary ZIP archive
-        output_file: Any = tmpdir.join("ise.zip")
+        output_file = tmpdir.join("ise.zip")
         cisco_client.write_to_archive(final_dict, str(output_file), "ise")
 
         # Compare the content of ise.json inside the ZIP with expected data
-        expected_json_file: str = "tests/integration/ise/fixtures/ise.json"
+        expected_json_file = "tests/integration/ise/fixtures/ise.json"
         with open(expected_json_file) as f_expected:
-            expected_data: dict[str, Any] = json.load(f_expected)
+            expected_data = json.load(f_expected)
 
         # Extract ise.json from the ZIP archive and compare
         import zipfile
 
         with zipfile.ZipFile(str(output_file), "r") as zip_file:
             with zip_file.open("ise.json") as f_actual:
-                actual_data: dict[str, Any] = json.load(f_actual)
+                actual_data = json.load(f_actual)
 
         assert actual_data == expected_data, "Output JSON data does not match expected"

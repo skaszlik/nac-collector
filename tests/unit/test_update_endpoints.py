@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "scripts"))
 
 
-def test_update_endpoints_import() -> None:
+def test_update_endpoints_import():
     """Test that the update_endpoints module can be imported."""
     import update_endpoints
 
@@ -18,7 +18,7 @@ def test_update_endpoints_import() -> None:
 
 
 @patch("update_endpoints.GithubRepoWrapper")
-def test_update_endpoint_file_success(mock_wrapper: MagicMock) -> None:
+def test_update_endpoint_file_success(mock_wrapper):
     """Test successful update of an endpoint file."""
     import update_endpoints
 
@@ -51,7 +51,7 @@ def test_update_endpoint_file_success(mock_wrapper: MagicMock) -> None:
 
 
 @patch("update_endpoints.GithubRepoWrapper")
-def test_update_endpoint_file_failure(mock_wrapper: MagicMock) -> None:
+def test_update_endpoint_file_failure(mock_wrapper):
     """Test handling of failure in updating endpoint file."""
     import update_endpoints
 
@@ -64,7 +64,7 @@ def test_update_endpoint_file_failure(mock_wrapper: MagicMock) -> None:
     assert result is False
 
 
-def test_main_exit_codes() -> None:
+def test_main_exit_codes():
     """Test that main returns correct exit codes."""
     import update_endpoints
 

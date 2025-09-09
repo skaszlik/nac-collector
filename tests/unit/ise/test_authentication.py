@@ -1,4 +1,3 @@
-from typing import Any
 from unittest.mock import Mock
 
 import pytest
@@ -9,7 +8,7 @@ pytestmark = pytest.mark.unit
 
 
 @pytest.fixture
-def cisco_client() -> CiscoClientISE:
+def cisco_client():
     return CiscoClientISE(
         username="test_user",
         password="test_password",
@@ -21,21 +20,21 @@ def cisco_client() -> CiscoClientISE:
     )
 
 
-def test_authenticate_success(mocker: Any, cisco_client: CiscoClientISE) -> None:
-    mock_response: Mock = Mock()
+def test_authenticate_success(mocker, cisco_client):
+    mock_response = Mock()
     mock_response.status_code = 200
     mocker.patch("httpx.get", return_value=mock_response)
 
-    result: bool = cisco_client.authenticate()
+    result = cisco_client.authenticate()
     assert result is True
     assert cisco_client.client is not None
 
 
-def test_authenticate_failure(mocker: Any, cisco_client: CiscoClientISE) -> None:
-    mock_response: Mock = Mock()
+def test_authenticate_failure(mocker, cisco_client):
+    mock_response = Mock()
     mock_response.status_code = 401
     mocker.patch("httpx.get", return_value=mock_response)
 
-    result: bool = cisco_client.authenticate()
+    result = cisco_client.authenticate()
     assert result is False
     assert cisco_client.client is None

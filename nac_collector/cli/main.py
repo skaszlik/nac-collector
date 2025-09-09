@@ -11,10 +11,12 @@ import nac_collector
 from nac_collector.cisco_client import CiscoClient
 from nac_collector.cisco_client_catalystcenter import CiscoClientCATALYSTCENTER
 from nac_collector.cisco_client_fmc import CiscoClientFMC
+from nac_collector.cisco_client_ios_xe import CiscoClientIOSXE
 from nac_collector.cisco_client_ise import CiscoClientISE
 from nac_collector.cisco_client_ndo import CiscoClientNDO
 from nac_collector.cisco_client_sdwan import CiscoClientSDWAN
 from nac_collector.constants import MAX_RETRIES, RETRY_AFTER, TIMEOUT
+from nac_collector.device_inventory import load_devices_from_file
 from nac_collector.endpoint_resolver import EndpointResolver
 
 console = Console()
@@ -50,6 +52,7 @@ class Solution(str, Enum):
     NDO = "NDO"
     FMC = "FMC"
     CATALYSTCENTER = "CATALYSTCENTER"
+    IOSXE = "IOSXE"
 
 
 def configure_logging(level: LogLevel) -> None:
@@ -148,6 +151,14 @@ def main(
         str | None,
         typer.Option("-o", "--output", help="Path to the output ZIP archive"),
     ] = None,
+    devices_file: Annotated[
+        str | None,
+        typer.Option(
+            "-d",
+            "--devices-file",
+            help="Path to devices inventory YAML file (for device-based solutions)",
+        ),
+    ] = None,
     version: Annotated[
         bool | None,
         typer.Option(
@@ -162,6 +173,9 @@ def main(
 
     configure_logging(verbosity)
 
+    # Define device-based solutions
+    DEVICE_BASED_SOLUTIONS = [Solution.IOSXE]
+
     # Check for incompatible option combinations
     if fetch_latest and solution == Solution.NDO:
         console.print(
@@ -169,55 +183,96 @@ def main(
         )
         raise typer.Exit(1)
 
-    # Resolve endpoint data using centralized resolver
-    endpoints_data = EndpointResolver.resolve_endpoint_data(
-        solution=solution.value.lower(),
-        explicit_file=endpoints_file,
-        use_git_provider=fetch_latest,
-    )
-
-    if endpoints_data is None:
-        console.print(
-            f"[red]No endpoint data found for solution: {solution.value}[/red]"
-        )
-        console.print("[yellow]Available options:[/yellow]")
-        console.print("1. Use --endpoints-file to specify a custom file")
-        console.print("2. Use --fetch-latest to fetch from upstream sources")
-        console.print("3. Ensure packaged resources are available")
-        raise typer.Exit(1)
     output_file = output or "nac-collector.zip"
 
-    cisco_client_class: type[CiscoClient] | None = None
-    if solution == Solution.SDWAN:
-        cisco_client_class = CiscoClientSDWAN
-    elif solution == Solution.ISE:
-        cisco_client_class = CiscoClientISE
-    elif solution == Solution.NDO:
-        cisco_client_class = CiscoClientNDO
-    elif solution == Solution.FMC:
-        cisco_client_class = CiscoClientFMC
-    elif solution == Solution.CATALYSTCENTER:
-        cisco_client_class = CiscoClientCATALYSTCENTER
-
-    if cisco_client_class:
-        client = cisco_client_class(
-            username=username,
-            password=password,
-            base_url=url,
-            max_retries=MAX_RETRIES,
-            retry_after=RETRY_AFTER,
-            timeout=timeout,
-            ssl_verify=False,
-        )
-
-        # Authenticate
-        if not client.authenticate():
-            console.print("[red]Authentication failed. Exiting...[/red]")
+    # Handle device-based solutions
+    if solution in DEVICE_BASED_SOLUTIONS:
+        # Validate devices file is provided
+        if not devices_file:
+            console.print(
+                f"[red]--devices-file is required for {solution.value} solution[/red]"
+            )
             raise typer.Exit(1)
 
-        # Use resolved endpoint data
-        final_dict = client.get_from_endpoints_data(endpoints_data)
-        client.write_to_archive(final_dict, output_file, solution.value.lower())
+        # Load devices
+        devices = load_devices_from_file(devices_file)
+        if not devices:
+            console.print(
+                "[red]Failed to load devices from file or no devices found[/red]"
+            )
+            raise typer.Exit(1)
+
+        # Device-based solutions don't need endpoints file
+        if endpoints_file:
+            console.print(
+                f"[yellow]Warning: --endpoints-file is ignored for {solution.value} "
+                f"(device-based solutions use built-in endpoints)[/yellow]"
+            )
+
+        # Create appropriate client based on solution
+        if solution == Solution.IOSXE:
+            ios_xe_client = CiscoClientIOSXE(
+                devices=devices,
+                default_username=username,
+                default_password=password,
+                max_retries=MAX_RETRIES,
+                retry_after=RETRY_AFTER,
+                timeout=timeout,
+                ssl_verify=False,
+            )
+            # Collect from all devices and write to archive
+            ios_xe_client.collect_and_write_to_archive(output_file)
+
+    # Handle existing controller-based solutions
+    else:
+        # Resolve endpoint data using centralized resolver
+        endpoints_data = EndpointResolver.resolve_endpoint_data(
+            solution=solution.value.lower(),
+            explicit_file=endpoints_file,
+            use_git_provider=fetch_latest,
+        )
+
+        if endpoints_data is None:
+            console.print(
+                f"[red]No endpoint data found for solution: {solution.value}[/red]"
+            )
+            console.print("[yellow]Available options:[/yellow]")
+            console.print("1. Use --endpoints-file to specify a custom file")
+            console.print("2. Use --fetch-latest to fetch from upstream sources")
+            console.print("3. Ensure packaged resources are available")
+            raise typer.Exit(1)
+
+        cisco_client_class: type[CiscoClient] | None = None
+        if solution == Solution.SDWAN:
+            cisco_client_class = CiscoClientSDWAN
+        elif solution == Solution.ISE:
+            cisco_client_class = CiscoClientISE
+        elif solution == Solution.NDO:
+            cisco_client_class = CiscoClientNDO
+        elif solution == Solution.FMC:
+            cisco_client_class = CiscoClientFMC
+        elif solution == Solution.CATALYSTCENTER:
+            cisco_client_class = CiscoClientCATALYSTCENTER
+
+        if cisco_client_class:
+            client = cisco_client_class(
+                username=username,
+                password=password,
+                base_url=url,
+                max_retries=MAX_RETRIES,
+                retry_after=RETRY_AFTER,
+                timeout=timeout,
+                ssl_verify=False,
+            )
+
+            # Authenticate
+            if not client.authenticate():
+                console.print("[red]Authentication failed. Exiting...[/red]")
+                raise typer.Exit(1)
+
+            # Use resolved endpoint data
+            final_dict = client.get_from_endpoints_data(endpoints_data)
+            client.write_to_archive(final_dict, output_file, solution.value.lower())
 
     # Record the stop time
     stop_time = time.time()

@@ -1,5 +1,3 @@
-from typing import Any
-
 import pytest
 
 from nac_collector.cisco_client_ise import CiscoClientISE
@@ -8,7 +6,7 @@ pytestmark = pytest.mark.unit
 
 
 @pytest.fixture
-def cisco_client() -> CiscoClientISE:
+def cisco_client():
     # Mocked CiscoClientISE instance for testing
     return CiscoClientISE(
         username="test_user",
@@ -21,19 +19,19 @@ def cisco_client() -> CiscoClientISE:
     )
 
 
-def test_fetch_data_none_response(mocker: Any, cisco_client: CiscoClientISE) -> None:
+def test_fetch_data_none_response(mocker, cisco_client):
     # Mocking fetch_data to return None
     mocker.patch.object(cisco_client, "fetch_data", return_value=None)
 
-    endpoint: str = "/api/test_endpoint"
-    data: Any = cisco_client.fetch_data(endpoint)
+    endpoint = "/api/test_endpoint"
+    data = cisco_client.fetch_data(endpoint)
 
     assert data is None
 
 
-def test_fetch_data_list_response(mocker: Any, cisco_client: CiscoClientISE) -> None:
+def test_fetch_data_list_response(mocker, cisco_client):
     # Mocking fetch_data to return a list wrapped in a dict (since fetch_data returns dict | None)
-    mock_data: dict[str, Any] = {
+    mock_data = {
         "response": [
             {"id": "1", "name": "Item 1"},
             {"id": "2", "name": "Item 2"},
@@ -41,7 +39,7 @@ def test_fetch_data_list_response(mocker: Any, cisco_client: CiscoClientISE) -> 
     }
     mocker.patch.object(cisco_client, "fetch_data", return_value=mock_data)
 
-    endpoint: str = "/api/test_endpoint"
+    endpoint = "/api/test_endpoint"
     data = cisco_client.fetch_data(endpoint)
 
     assert isinstance(data, dict)
@@ -50,14 +48,12 @@ def test_fetch_data_list_response(mocker: Any, cisco_client: CiscoClientISE) -> 
     assert data["response"][0]["id"] == "1"
 
 
-def test_fetch_data_single_dict_response(
-    mocker: Any, cisco_client: CiscoClientISE
-) -> None:
+def test_fetch_data_single_dict_response(mocker, cisco_client):
     # Mocking fetch_data to return a single dictionary
-    mock_data: dict[str, str] = {"id": "1", "name": "Single Item"}
+    mock_data = {"id": "1", "name": "Single Item"}
     mocker.patch.object(cisco_client, "fetch_data", return_value=mock_data)
 
-    endpoint: str = "/api/test_endpoint"
+    endpoint = "/api/test_endpoint"
     data = cisco_client.fetch_data(endpoint)
 
     assert isinstance(data, dict)
