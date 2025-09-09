@@ -75,7 +75,7 @@ class TestAuthenticateDevice:
 
         assert result is True
         mock_client.get.assert_called_once_with(
-            "https://test.example.com/restconf/data",
+            "https://test.example.com/.well-known/host-meta",
             auth=("test_user", "test_pass"),
             timeout=30,
             headers={"Accept": "application/yang-data+json"},
@@ -130,7 +130,7 @@ class TestAuthenticateDevice:
 
         # Should use default credentials
         mock_client.get.assert_called_once_with(
-            "https://test.example.com/restconf/data",
+            "https://test.example.com/.well-known/host-meta",
             auth=("default_user", "default_pass"),
             timeout=30,
             headers={"Accept": "application/yang-data+json"},
@@ -257,7 +257,7 @@ class TestCollectFromDevice:
         mock_client_class.assert_called_once_with(
             verify=False,  # Should match ios_xe_client.ssl_verify
             auth=("default_user", "default_pass"),
-            timeout=30,
+            timeout=120,  # Should use RESTCONF_DATA_TIMEOUT for data collection
             headers={"Accept": "application/yang-data+json"},
         )
 
@@ -279,7 +279,7 @@ class TestIntegration:
         mock_client = MagicMock()
 
         def side_effect(url, **kwargs):
-            if url.endswith("/restconf/data"):
+            if url.endswith("/.well-known/host-meta"):
                 return mock_auth_response
             else:
                 return mock_collect_response
@@ -317,3 +317,6 @@ class TestConstants:
             CiscoClientIOSXE.CONFIG_ENDPOINT
             == "/restconf/data/Cisco-IOS-XE-native:native"
         )
+
+    def test_restconf_data_timeout_constant(self):
+        assert CiscoClientIOSXE.RESTCONF_DATA_TIMEOUT == 120
