@@ -1,5 +1,6 @@
+import zipfile
 from typing import Any
-from unittest.mock import MagicMock, mock_open, patch
+from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
@@ -454,21 +455,25 @@ class TestFetchDataPagination:
         assert result is None
 
 
-class TestWriteToJson:
-    def test_write_to_json(self, cisco_client: ConcreteCiscoClient) -> None:
+class TestWriteToArchive:
+    def test_write_to_archive(self, cisco_client: ConcreteCiscoClient) -> None:
         test_data = {"key": "value", "number": 42}
 
-        with patch("builtins.open", mock_open()) as mock_file:
-            cisco_client.write_to_json(test_data, "test_output.json")
+        with patch("zipfile.ZipFile") as mock_zipfile:
+            mock_zip_instance = mock_zipfile.return_value.__enter__.return_value
+            cisco_client.write_to_archive(test_data, "test_output.zip", "test_tech")
 
-        mock_file.assert_called_once_with("test_output.json", "w", encoding="utf-8")
-        handle = mock_file()
-        handle.write.assert_called()
+        mock_zipfile.assert_called_once_with(
+            "test_output.zip", "w", zipfile.ZIP_DEFLATED
+        )
+        mock_zip_instance.writestr.assert_called_once()
 
-        # Verify JSON format by checking if json.dump was called correctly
-        written_content = "".join(call.args[0] for call in handle.write.call_args_list)
-        assert "key" in written_content
-        assert "value" in written_content
+        # Verify the JSON file name and content
+        call_args = mock_zip_instance.writestr.call_args
+        filename, content = call_args[0]
+        assert filename == "test_tech.json"
+        assert "key" in content
+        assert "value" in content
 
 
 class TestCreateEndpointDict:

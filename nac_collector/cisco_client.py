@@ -1,6 +1,7 @@
 import json
 import logging
 import time
+import zipfile
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -305,17 +306,24 @@ class CiscoClient(ABC):
             self.logger.error("No valid response received for endpoint: %s", endpoint)
             return None
 
-    def write_to_json(self, final_dict: dict[str, Any], output: str) -> None:
+    def write_to_archive(
+        self, final_dict: dict[str, Any], output: str, technology: str
+    ) -> None:
         """
-        Writes the final dictionary to a JSON file.
+        Writes the final dictionary to a ZIP archive containing a JSON file named after the technology.
 
         Parameters:
-            final_dict (dict): The final dictionary to write to the file.
-            output (str): Filename
+            final_dict (dict): The final dictionary to write to the archive.
+            output (str): ZIP archive filename
+            technology (str): Technology name for the JSON file inside the archive
         """
-        with open(output, "w", encoding="utf-8") as f:
-            json.dump(final_dict, f, indent=4)
-        self.logger.info("Data written to %s", output)
+        json_filename = f"{technology}.json"
+
+        with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            json_content = json.dumps(final_dict, indent=4)
+            zip_file.writestr(json_filename, json_content)
+
+        self.logger.info("Data written to %s (containing %s)", output, json_filename)
 
     @staticmethod
     def create_endpoint_dict(endpoint: dict[str, str]) -> dict[str, list[Any]]:

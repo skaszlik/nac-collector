@@ -146,7 +146,7 @@ def main(
     ] = TIMEOUT,
     output: Annotated[
         str | None,
-        typer.Option("-o", "--output", help="Path to the output JSON file"),
+        typer.Option("-o", "--output", help="Path to the output ZIP archive"),
     ] = None,
     version: Annotated[
         bool | None,
@@ -185,7 +185,7 @@ def main(
         console.print("2. Use --fetch-latest to fetch from upstream sources")
         console.print("3. Ensure packaged resources are available")
         raise typer.Exit(1)
-    output_file = output or f"{solution.value.lower()}.json"
+    output_file = output or "nac-collector.zip"
 
     cisco_client_class: type[CiscoClient] | None = None
     if solution == Solution.SDWAN:
@@ -217,7 +217,7 @@ def main(
 
         # Use resolved endpoint data
         final_dict = client.get_from_endpoints_data(endpoints_data)
-        client.write_to_json(final_dict, output_file)
+        client.write_to_archive(final_dict, output_file, solution.value.lower())
 
     # Record the stop time
     stop_time = time.time()

@@ -103,14 +103,20 @@ def test_cisco_client_ise_with_integration(
             endpoints_data
         )
 
-        # Write final_dict to a temporary JSON file
-        output_file: Any = tmpdir.join("ise.json")
-        cisco_client.write_to_json(final_dict, str(output_file))
+        # Write final_dict to a temporary ZIP archive
+        output_file: Any = tmpdir.join("ise.zip")
+        cisco_client.write_to_archive(final_dict, str(output_file), "ise")
 
-        # Compare the content of ise.json with expected data
+        # Compare the content of ise.json inside the ZIP with expected data
         expected_json_file: str = "tests/integration/ise/fixtures/ise.json"
-        with open(expected_json_file) as f_expected, open(str(output_file)) as f_actual:
+        with open(expected_json_file) as f_expected:
             expected_data: dict[str, Any] = json.load(f_expected)
-            actual_data: dict[str, Any] = json.load(f_actual)
+
+        # Extract ise.json from the ZIP archive and compare
+        import zipfile
+
+        with zipfile.ZipFile(str(output_file), "r") as zip_file:
+            with zip_file.open("ise.json") as f_actual:
+                actual_data: dict[str, Any] = json.load(f_actual)
 
         assert actual_data == expected_data, "Output JSON data does not match expected"
