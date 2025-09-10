@@ -42,6 +42,8 @@ class CiscoClientNDFC(CiscoClient):
         self.domain = domain
         self.fabric_name = fabric_name
         self.auth_cookie = None
+        self.is_msd_fabric = False
+        self.msd_topology = None
 
     def authenticate(self):
         """
@@ -274,10 +276,145 @@ class CiscoClientNDFC(CiscoClient):
 
         return endpoint_dict
 
+    def check_msd_fabric_and_get_topology(self):
+        """
+        Check if the provided fabric name is an MSD fabric and get topology information.
+        
+        Returns:
+            bool: True if MSD detection and topology retrieval is successful, False otherwise.
+        """
+        if not self.fabric_name:
+            logger.warning("No fabric name provided for MSD detection")
+            return False
+
+        if not self.session:
+            logger.error("No authenticated session available for MSD detection")
+            return False
+
+        try:
+            # Check MSD fabric associations
+            msd_endpoint = "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/control/fabrics/msd/fabric-associations"
+            logger.info("Checking MSD fabric associations for fabric: %s", self.fabric_name)
+            
+            msd_data = self.fetch_data(msd_endpoint)
+            
+            if not msd_data:
+                logger.info("No MSD fabric associations found. Treating %s as a regular fabric.", self.fabric_name)
+                self.is_msd_fabric = False
+                return True
+
+            if not isinstance(msd_data, list):
+                logger.warning("Unexpected MSD fabric associations response format. Treating %s as a regular fabric.", self.fabric_name)
+                self.is_msd_fabric = False
+                return True
+
+            # Check if the provided fabric is MSD root or member
+            fabric_parent = None
+            fabric_type = None
+            fabric_children = []
+            
+            for fabric_info in msd_data:
+                if not isinstance(fabric_info, dict):
+                    continue
+                    
+                fabric_name = fabric_info.get("fabricName")
+                if fabric_name == self.fabric_name:
+                    fabric_parent = fabric_info.get("fabricParent")
+                    fabric_type = fabric_info.get("fabricType")
+                    break
+
+            # If fabric not found in associations, treat as regular fabric
+            if fabric_parent is None and fabric_type != "MSD":
+                logger.info("Fabric %s not found in MSD associations. Treating as a regular fabric.", self.fabric_name)
+                self.is_msd_fabric = False
+                return True
+
+            # Check if this is MSD root fabric (fabricType == "MSD" and fabricParent == "None")
+            if fabric_type == "MSD" and fabric_parent == "None":
+                logger.info("Detected MSD root fabric: %s", self.fabric_name)
+                self.is_msd_fabric = True
+                
+                # Collect all child fabrics
+                for fabric_info in msd_data:
+                    if (isinstance(fabric_info, dict) and 
+                        fabric_info.get("fabricParent") == self.fabric_name and
+                        fabric_info.get("fabricState") == "member"):
+                        fabric_children.append(fabric_info.get("fabricName"))
+                
+                self.msd_topology = {
+                    "fabricParent": self.fabric_name,
+                    "fabricChildren": fabric_children
+                }
+                
+                logger.info("MSD topology: Parent=%s, Children=%s", self.fabric_name, fabric_children)
+                return True
+                
+            else:
+                # This is either a child fabric or not an MSD fabric
+                logger.info("Fabric %s is not an MSD root fabric (Type: %s, Parent: %s). Treating as a regular fabric.", 
+                           self.fabric_name, fabric_type, fabric_parent)
+                self.is_msd_fabric = False
+                return True
+
+        except Exception as e:
+            logger.error("Error during MSD fabric detection: %s", str(e))
+            logger.info("Treating %s as a regular fabric due to detection error.", self.fabric_name)
+            self.is_msd_fabric = False
+            return True  # Continue as regular fabric even if MSD detection fails
+
+    def process_endpoint_data_with_fabric_name(self, endpoint, endpoint_dict, data, fabric_name, id_=None):
+        """
+        Process the data for a given endpoint and update the endpoint_dict with fabric_name.
+        This is used for MSD fabrics where we need to track which fabric the data came from.
+
+        Parameters:
+            endpoint (dict): The endpoint configuration.
+            endpoint_dict (dict): The dictionary to store processed data.
+            data (dict or list): The data fetched from the endpoint.
+            fabric_name (str): The name of the fabric this data belongs to.
+            id_ (str, optional): Optional ID parameter.
+
+        Returns:
+            dict: The updated endpoint dictionary with processed data.
+        """
+
+        if data is None:
+            endpoint_dict[endpoint["name"]].append(
+                {"data": {}, "endpoint": endpoint["endpoint"], "fabric_name": fabric_name}
+            )
+            return endpoint_dict
+
+        # Handle different response patterns from NDFC
+        if isinstance(data, list):
+            # Direct list response
+            endpoint_dict[endpoint["name"]].append(
+                {"data": data, "endpoint": endpoint["endpoint"], "fabric_name": fabric_name}
+            )
+        elif isinstance(data, dict):
+            # Check for common NDFC response patterns
+            if "data" in data:
+                # Response has a 'data' wrapper
+                endpoint_dict[endpoint["name"]].append(
+                    {"data": data["data"], "endpoint": endpoint["endpoint"], "fabric_name": fabric_name}
+                )
+            elif "response" in data:
+                # Response has a 'response' wrapper
+                endpoint_dict[endpoint["name"]].append(
+                    {"data": data["response"], "endpoint": endpoint["endpoint"], "fabric_name": fabric_name}
+                )
+            else:
+                # Direct object response
+                endpoint_dict[endpoint["name"]].append(
+                    {"data": data, "endpoint": endpoint["endpoint"], "fabric_name": fabric_name}
+                )
+
+        return endpoint_dict
+
     def get_from_endpoints(self, endpoints_yaml_file):
         """
         Retrieve data from a list of endpoints specified in a YAML file and
         run GET requests to download data from NDFC controller.
+        Supports both single-site and multi-site (MSD) fabrics.
 
         Parameters:
             endpoints_yaml_file (str): The name of the YAML file containing the endpoints.
@@ -287,6 +424,28 @@ class CiscoClientNDFC(CiscoClient):
         """
         logger.info("Loading NDFC API endpoints from %s", endpoints_yaml_file)
 
+        # First, check if this is an MSD fabric
+        if not self.check_msd_fabric_and_get_topology():
+            logger.error("Failed to detect fabric topology")
+            return {}
+
+        if self.is_msd_fabric:
+            logger.info("Processing MSD fabric with topology: %s", self.msd_topology)
+            return self._get_from_endpoints_msd(endpoints_yaml_file)
+        else:
+            logger.info("Processing single-site fabric: %s", self.fabric_name)
+            return self._get_from_endpoints_single_site(endpoints_yaml_file)
+
+    def _get_from_endpoints_single_site(self, endpoints_yaml_file):
+        """
+        Process endpoints for a single-site fabric (non-MSD).
+        
+        Parameters:
+            endpoints_yaml_file (str): The name of the YAML file containing the endpoints.
+
+        Returns:
+            dict: Dictionary containing the collected data from all endpoints.
+        """
         try:
             with open(endpoints_yaml_file, "r", encoding="utf-8") as f:
                 endpoints = self.yaml.load(f)
@@ -301,12 +460,15 @@ class CiscoClientNDFC(CiscoClient):
             logger.warning("No API endpoints found in %s", endpoints_yaml_file)
             return {}
 
+        # Filter out MSD-specific endpoints for single-site processing
+        filtered_endpoints = [ep for ep in endpoints if ep.get("name") != "MSD_Fabric_Associations"]
+        
         # Initialize the result dictionary
         endpoint_dict = {}
 
-        logger.info("Processing %d API endpoints", len(endpoints))
+        logger.info("Processing %d API endpoints for single-site fabric", len(filtered_endpoints))
 
-        for endpoint in endpoints:
+        for endpoint in filtered_endpoints:
             if (
                 not isinstance(endpoint, dict)
                 or "name" not in endpoint
@@ -401,7 +563,179 @@ class CiscoClientNDFC(CiscoClient):
                     {"data": {}, "endpoint": endpoint_url, "error": str(e)}
                 )
 
-        logger.info("NDFC data collection completed from %d endpoints", len(endpoints))
+        logger.info("NDFC single-site data collection completed from %d endpoints", len(filtered_endpoints))
+        return endpoint_dict
+
+    def _get_from_endpoints_msd(self, endpoints_yaml_file):
+        """
+        Process endpoints for MSD (Multi-Site Domain) fabric.
+        
+        Parameters:
+            endpoints_yaml_file (str): The name of the YAML file containing the endpoints.
+
+        Returns:
+            dict: Dictionary containing the MSD topology and collected data from all child fabrics.
+        """
+        try:
+            with open(endpoints_yaml_file, "r", encoding="utf-8") as f:
+                endpoints = self.yaml.load(f)
+        except FileNotFoundError:
+            logger.error("API Endpoints file not found: %s", endpoints_yaml_file)
+            return {}
+        except Exception as e:
+            logger.error("Error loading API endpoints file: %s", str(e))
+            return {}
+
+        if not endpoints:
+            logger.warning("No API endpoints found in %s", endpoints_yaml_file)
+            return {}
+
+        # Filter out MSD-specific endpoints
+        msd_endpoints = [ep for ep in endpoints if ep.get("name") != "MSD_Fabric_Associations"]
+        
+        # Initialize the result dictionary with MSD structure
+        result_dict = {
+            "MSD_Topology": self.msd_topology
+        }
+
+        logger.info("Processing %d API endpoints for MSD fabric with %d child fabrics", 
+                   len(msd_endpoints), len(self.msd_topology["fabricChildren"]))
+
+        # Process each child fabric
+        for child_fabric in self.msd_topology["fabricChildren"]:
+            logger.info("Processing child fabric: %s", child_fabric)
+            
+            # Temporarily set fabric_name to the child fabric
+            original_fabric_name = self.fabric_name
+            self.fabric_name = child_fabric
+            
+            try:
+                child_data = self._process_fabric_endpoints(msd_endpoints, child_fabric)
+                
+                # Merge child fabric data into result_dict
+                for endpoint_name, data_list in child_data.items():
+                    if endpoint_name not in result_dict:
+                        result_dict[endpoint_name] = []
+                    result_dict[endpoint_name].extend(data_list)
+                    
+            except Exception as e:
+                logger.error("Error processing child fabric %s: %s", child_fabric, str(e))
+                # Continue with other fabrics even if one fails
+                
+            finally:
+                # Restore original fabric name
+                self.fabric_name = original_fabric_name
+
+        logger.info("MSD data collection completed for all child fabrics")
+        return result_dict
+
+    def _process_fabric_endpoints(self, endpoints, fabric_name):
+        """
+        Process endpoints for a specific fabric.
+        
+        Parameters:
+            endpoints (list): List of endpoint configurations.
+            fabric_name (str): Name of the fabric to process.
+
+        Returns:
+            dict: Dictionary containing the collected data from all endpoints for this fabric.
+        """
+        endpoint_dict = {}
+        
+        for endpoint in endpoints:
+            if (
+                not isinstance(endpoint, dict)
+                or "name" not in endpoint
+                or "endpoint" not in endpoint
+            ):
+                logger.warning(
+                    "Skipping invalid API endpoint configuration: %s", endpoint
+                )
+                continue
+
+            endpoint_name = endpoint["name"]
+            endpoint_url = endpoint["endpoint"]
+
+            # Replace %v placeholder with actual fabric name
+            if "%v" in endpoint_url:
+                endpoint_url = endpoint_url.replace("%v", fabric_name)
+                logger.debug("Replaced %%v in URL for fabric %s: %s", fabric_name, endpoint_url)
+
+            # Check if this is a Policies endpoint that requires filtering by discovered switch serial numbers
+            if endpoint_name == "Policies" and "/policies" in endpoint_url:
+                logger.info(
+                    "Processing Policies endpoint with client-side serial number filtering for fabric %s", fabric_name
+                )
+                self._process_policies_endpoint_with_filtering_msd(endpoint, endpoint_dict, fabric_name)
+                continue
+
+            # Check if this is a VPC endpoint that requires filtering by discovered switch serial numbers
+            if endpoint_name == "VPC_Pairs" and "/vpcpair" in endpoint_url:
+                logger.info(
+                    "Processing VPC pairs endpoint with client-side serial number filtering for fabric %s", fabric_name
+                )
+                self._process_vpc_pairs_endpoint_with_filtering_msd(endpoint, endpoint_dict, fabric_name)
+                continue
+
+            # Skip VPC children endpoints as they are processed as embedded data in VPC_Pairs
+            if self._is_vpc_child_endpoint(endpoint_name):
+                logger.info(
+                    "Skipping VPC child endpoint %s for fabric %s - interface data will be embedded in VPC_Pairs",
+                    endpoint_name, fabric_name
+                )
+                continue
+            
+            # Initialize list for this endpoint if not exists
+            if endpoint_name not in endpoint_dict:
+                endpoint_dict[endpoint_name] = []
+
+            logger.info("Fetching data from endpoint: %s for fabric: %s", endpoint_name, fabric_name)
+            logger.debug("Endpoint URL: %s", endpoint_url)
+
+            try:
+                # Make the API request using the parent class fetch_data method
+                data = self.fetch_data(endpoint_url)
+
+                if data is not None:
+                    logger.info("Successfully retrieved data from %s for fabric %s", endpoint_name, fabric_name)
+                    logger.debug(
+                        "Response data keys: %s",
+                        list(data.keys())
+                        if isinstance(data, dict)
+                        else f"List with {len(data)} items"
+                        if isinstance(data, list)
+                        else "Non-dict/list response",
+                    )
+
+                    # Process the data using the MSD-aware process_endpoint_data method
+                    endpoint_dict = self.process_endpoint_data_with_fabric_name(
+                        endpoint, endpoint_dict, data, fabric_name
+                    )
+
+                    # Handle children endpoints
+                    if endpoint.get("children"):
+                        logger.info("Processing children endpoints for %s in fabric %s", endpoint_name, fabric_name)
+                        self._process_children_endpoints_msd(endpoint, endpoint_dict, fabric_name)
+
+                else:
+                    logger.error("Failed to fetch data from %s for fabric %s", endpoint_name, fabric_name)
+                    # Add empty data entry for failed request
+                    endpoint_dict[endpoint_name].append(
+                        {
+                            "data": {},
+                            "endpoint": endpoint_url,
+                            "fabric_name": fabric_name,
+                            "error": "Failed to fetch data",
+                        }
+                    )
+
+            except Exception as e:
+                logger.error(
+                    "Unexpected error fetching data from %s for fabric %s: %s", endpoint_name, fabric_name, str(e)
+                )
+                endpoint_dict[endpoint_name].append(
+                    {"data": {}, "endpoint": endpoint_url, "fabric_name": fabric_name, "error": str(e)}
+                )
 
         return endpoint_dict
 
@@ -1714,3 +2048,465 @@ class CiscoClientNDFC(CiscoClient):
         )
 
         return filtered_interfaces
+
+    def _process_policies_endpoint_with_filtering_msd(self, endpoint, endpoint_dict, fabric_name):
+        """
+        Process Policies endpoint for MSD fabrics by fetching all policies and filtering by discovered switch serial numbers.
+
+        Parameters:
+            endpoint (dict): The endpoint configuration containing name and endpoint URL.
+            endpoint_dict (dict): The dictionary to store results in.
+            fabric_name (str): The name of the fabric being processed.
+        """
+        endpoint_name = endpoint["name"]
+        endpoint_url = endpoint["endpoint"]
+
+        # Initialize list for this endpoint if not exists
+        if endpoint_name not in endpoint_dict:
+            endpoint_dict[endpoint_name] = []
+
+        logger.info(
+            "Processing Policies endpoint with client-side filtering by serial numbers for fabric %s", fabric_name
+        )
+
+        # Ensure Discovered_Switches data exists for serial correlation
+        if "Discovered_Switches" not in endpoint_dict:
+            logger.error(
+                "Cannot process Policies endpoint for fabric %s: Discovered_Switches data not available", fabric_name
+            )
+            logger.error(
+                "Make sure Discovered_Switches endpoint is defined before Policies endpoint"
+            )
+            endpoint_dict[endpoint_name].append(
+                {
+                    "data": {},
+                    "endpoint": endpoint_url,
+                    "fabric_name": fabric_name,
+                    "error": "Discovered_Switches data not available",
+                }
+            )
+            return
+
+        # Extract serial numbers from Discovered_Switches for this specific fabric
+        discovered_serial_numbers = set()
+        for discovered_entry in endpoint_dict["Discovered_Switches"]:
+            if discovered_entry.get("fabric_name") == fabric_name:
+                discovered_data = discovered_entry.get("data", [])
+                if isinstance(discovered_data, list):
+                    for switch in discovered_data:
+                        if isinstance(switch, dict) and "serialNumber" in switch:
+                            discovered_serial_numbers.add(switch["serialNumber"])
+
+        if not discovered_serial_numbers:
+            logger.warning("No discovered switches found for fabric %s. Policies endpoint will return empty data.", fabric_name)
+            endpoint_dict[endpoint_name].append(
+                {
+                    "data": [],
+                    "endpoint": endpoint_url,
+                    "fabric_name": fabric_name,
+                    "filtered_serial_numbers": [],
+                    "total_policies_received": 0,
+                    "filtered_policies_count": 0,
+                }
+            )
+            return
+
+        logger.info("Found %d discovered switches for fabric %s", len(discovered_serial_numbers), fabric_name)
+
+        try:
+            # Fetch all policies from the endpoint
+            all_policies_data = self.fetch_data(endpoint_url)
+
+            if all_policies_data is None:
+                logger.error("Failed to fetch policies data for fabric %s", fabric_name)
+                endpoint_dict[endpoint_name].append(
+                    {
+                        "data": {},
+                        "endpoint": endpoint_url,
+                        "fabric_name": fabric_name,
+                        "error": "Failed to fetch policies data",
+                    }
+                )
+                return
+
+            # Handle different response formats
+            all_policies = []
+            if isinstance(all_policies_data, list):
+                all_policies = all_policies_data
+            elif isinstance(all_policies_data, dict):
+                if "data" in all_policies_data:
+                    all_policies = all_policies_data["data"]
+                elif "response" in all_policies_data:
+                    all_policies = all_policies_data["response"]
+                else:
+                    all_policies = [all_policies_data]
+
+            logger.info("Retrieved %d total policies for filtering (fabric %s)", len(all_policies), fabric_name)
+
+            # Filter policies by discovered switch serial numbers and exclude unwanted templates
+            filtered_policies = []
+            for policy in all_policies:
+                if not isinstance(policy, dict):
+                    continue
+
+                # Check if policy is bound to a discovered switch
+                policy_serial = policy.get("serialNumber")
+                if policy_serial and policy_serial in discovered_serial_numbers:
+                    # Check if policy template should be excluded
+                    template_name = policy.get("templateName", "")
+                    if template_name not in self.POLICYS_TEMPLATE_NAMES_TO_EXCLUDE:
+                        filtered_policies.append(policy)
+                    else:
+                        logger.debug("Excluding policy with template: %s", template_name)
+
+            logger.info(
+                "Policies filtering results for fabric %s: %d policies matched out of %d total policies",
+                fabric_name, len(filtered_policies), len(all_policies)
+            )
+
+            # Store the filtered results
+            endpoint_dict[endpoint_name].append(
+                {
+                    "data": filtered_policies,
+                    "endpoint": endpoint_url,
+                    "fabric_name": fabric_name,
+                    "filtered_serial_numbers": list(discovered_serial_numbers),
+                    "total_policies_received": len(all_policies),
+                    "filtered_policies_count": len(filtered_policies),
+                }
+            )
+
+        except Exception as e:
+            logger.error(
+                "Unexpected error processing Policies endpoint for fabric %s: %s", fabric_name, str(e)
+            )
+            endpoint_dict[endpoint_name].append(
+                {"data": {}, "endpoint": endpoint_url, "fabric_name": fabric_name, "error": str(e)}
+            )
+
+    def _process_vpc_pairs_endpoint_with_filtering_msd(self, endpoint, endpoint_dict, fabric_name):
+        """
+        Process VPC pairs endpoint for MSD fabrics by fetching all VPC pairs and filtering by discovered switch serial numbers.
+
+        Parameters:
+            endpoint (dict): The endpoint configuration containing name and endpoint URL.
+            endpoint_dict (dict): The dictionary to store results in.
+            fabric_name (str): The name of the fabric being processed.
+        """
+        endpoint_name = endpoint["name"]
+        endpoint_url = endpoint["endpoint"]
+
+        # Initialize list for this endpoint if not exists
+        if endpoint_name not in endpoint_dict:
+            endpoint_dict[endpoint_name] = []
+
+        logger.info(
+            "Processing VPC pairs endpoint with client-side filtering by serial numbers for fabric %s", fabric_name
+        )
+
+        # Ensure Discovered_Switches data exists for serial correlation
+        if "Discovered_Switches" not in endpoint_dict:
+            logger.error(
+                "Cannot process VPC pairs endpoint for fabric %s: Discovered_Switches data not available", fabric_name
+            )
+            logger.error(
+                "Make sure Discovered_Switches endpoint is defined before VPC_Pairs endpoint"
+            )
+            endpoint_dict[endpoint_name].append(
+                {
+                    "data": {},
+                    "endpoint": endpoint_url,
+                    "fabric_name": fabric_name,
+                    "error": "Discovered_Switches data not available",
+                }
+            )
+            return
+
+        # Extract serial numbers from Discovered_Switches for this specific fabric
+        discovered_serial_numbers = set()
+        for discovered_entry in endpoint_dict["Discovered_Switches"]:
+            if discovered_entry.get("fabric_name") == fabric_name:
+                discovered_data = discovered_entry.get("data", [])
+                if isinstance(discovered_data, list):
+                    for switch in discovered_data:
+                        if isinstance(switch, dict) and "serialNumber" in switch:
+                            discovered_serial_numbers.add(switch["serialNumber"])
+
+        if not discovered_serial_numbers:
+            logger.warning("No discovered switches found for fabric %s. VPC pairs endpoint will return empty data.", fabric_name)
+            endpoint_dict[endpoint_name].append(
+                {
+                    "data": [],
+                    "endpoint": endpoint_url,
+                    "fabric_name": fabric_name,
+                    "filtered_serial_numbers": [],
+                    "total_vpc_pairs_received": 0,
+                    "filtered_vpc_pairs_count": 0,
+                }
+            )
+            return
+
+        logger.info("Found %d discovered switches for VPC filtering (fabric %s)", len(discovered_serial_numbers), fabric_name)
+
+        try:
+            # Fetch all VPC pairs from the endpoint
+            all_vpc_data = self.fetch_data(endpoint_url)
+
+            if all_vpc_data is None:
+                logger.error("Failed to fetch VPC pairs data for fabric %s", fabric_name)
+                endpoint_dict[endpoint_name].append(
+                    {
+                        "data": {},
+                        "endpoint": endpoint_url,
+                        "fabric_name": fabric_name,
+                        "error": "Failed to fetch VPC pairs data",
+                    }
+                )
+                return
+
+            # Handle different response formats
+            all_vpc_pairs = []
+            if isinstance(all_vpc_data, list):
+                all_vpc_pairs = all_vpc_data
+            elif isinstance(all_vpc_data, dict):
+                if "data" in all_vpc_data:
+                    all_vpc_pairs = all_vpc_data["data"]
+                elif "response" in all_vpc_data:
+                    all_vpc_pairs = all_vpc_data["response"]
+                else:
+                    all_vpc_pairs = [all_vpc_data]
+
+            logger.info("Retrieved %d total VPC pairs for filtering (fabric %s)", len(all_vpc_pairs), fabric_name)
+
+            # Filter VPC pairs by discovered switch serial numbers
+            filtered_vpc_pairs = []
+            for vpc_pair in all_vpc_pairs:
+                if not isinstance(vpc_pair, dict):
+                    continue
+
+                # Check if either peer is in the discovered switches
+                peer_one_id = vpc_pair.get("peerOneId")
+                peer_two_id = vpc_pair.get("peerTwoId")
+
+                if (peer_one_id and peer_one_id in discovered_serial_numbers) or \
+                   (peer_two_id and peer_two_id in discovered_serial_numbers):
+                    filtered_vpc_pairs.append(vpc_pair)
+
+            logger.info(
+                "VPC pairs filtering results for fabric %s: %d VPC pairs matched out of %d total VPC pairs",
+                fabric_name, len(filtered_vpc_pairs), len(all_vpc_pairs)
+            )
+
+            # Store the filtered results
+            endpoint_dict[endpoint_name].append(
+                {
+                    "data": filtered_vpc_pairs,
+                    "endpoint": endpoint_url,
+                    "fabric_name": fabric_name,
+                    "filtered_serial_numbers": list(discovered_serial_numbers),
+                    "total_vpc_pairs_received": len(all_vpc_pairs),
+                    "filtered_vpc_pairs_count": len(filtered_vpc_pairs),
+                }
+            )
+
+        except Exception as e:
+            logger.error(
+                "Unexpected error processing VPC pairs endpoint for fabric %s: %s", fabric_name, str(e)
+            )
+            endpoint_dict[endpoint_name].append(
+                {"data": {}, "endpoint": endpoint_url, "fabric_name": fabric_name, "error": str(e)}
+            )
+
+    def _process_children_endpoints_msd(self, parent_endpoint, endpoint_dict, fabric_name):
+        """
+        Process children endpoints for MSD fabrics with fabric-specific context.
+
+        Parameters:
+            parent_endpoint (dict): The parent endpoint configuration.
+            endpoint_dict (dict): The dictionary containing the processed data.
+            fabric_name (str): The name of the fabric being processed.
+        """
+        parent_name = parent_endpoint["name"]
+        logger.info("Processing children endpoints for %s in fabric %s", parent_name, fabric_name)
+
+        # Special handling for Network_Configuration endpoint
+        if parent_name == "Network_Configuration":
+            self._process_network_attachments_msd(parent_endpoint, endpoint_dict, fabric_name)
+        elif parent_name == "VRF_Configuration":
+            self._process_vrf_attachments_msd(parent_endpoint, endpoint_dict, fabric_name)
+        else:
+            # Generic children processing for other endpoints (if needed in the future)
+            logger.warning("Generic children processing not yet implemented for: %s in fabric %s", parent_name, fabric_name)
+
+    def _process_network_attachments_msd(self, parent_endpoint, endpoint_dict, fabric_name):
+        """
+        Process Network_Attachments children endpoints for MSD fabrics.
+        Only processes networks with networkStatus = "DEPLOYED".
+
+        Parameters:
+            parent_endpoint (dict): The parent Network_Configuration endpoint.
+            endpoint_dict (dict): The dictionary containing the processed data.
+            fabric_name (str): The name of the fabric being processed.
+        """
+        parent_name = parent_endpoint["name"]
+        
+        # Find the data for this specific fabric
+        parent_data = None
+        for entry in endpoint_dict.get(parent_name, []):
+            if entry.get("fabric_name") == fabric_name:
+                parent_data = entry.get("data", [])
+                break
+
+        if not parent_data:
+            logger.warning("No parent data found for %s in fabric %s", parent_name, fabric_name)
+            return
+
+        # Extract network names with status "DEPLOYED"
+        deployed_networks = []
+        for network in parent_data:
+            if isinstance(network, dict) and network.get("networkStatus") == "DEPLOYED":
+                network_name = network.get("networkName")
+                if network_name:
+                    deployed_networks.append(network_name)
+
+        if not deployed_networks:
+            logger.info("No deployed networks found for fabric %s", fabric_name)
+            return
+
+        logger.info("Found %d deployed networks for fabric %s: %s", len(deployed_networks), fabric_name, deployed_networks)
+
+        # Process children endpoints for each deployed network
+        for child_endpoint in parent_endpoint.get("children", []):
+            child_name = child_endpoint["name"]
+            child_url_template = child_endpoint["endpoint"]
+
+            # Initialize child endpoint in result dict
+            if child_name not in endpoint_dict:
+                endpoint_dict[child_name] = []
+
+            for network_name in deployed_networks:
+                # Replace template placeholders
+                processed_url = child_url_template
+                if "{{network_name}}" in processed_url:
+                    processed_url = processed_url.replace("{{network_name}}", network_name)
+                if "%v" in processed_url:
+                    processed_url = processed_url.replace("%v", fabric_name)
+
+                logger.info("Fetching %s for network %s in fabric %s", child_name, network_name, fabric_name)
+                logger.debug("Child endpoint URL: %s", processed_url)
+
+                try:
+                    child_data = self.fetch_data(processed_url)
+                    if child_data is not None:
+                        logger.info("Successfully retrieved %s for network %s in fabric %s", child_name, network_name, fabric_name)
+                        endpoint_dict[child_name].append({
+                            "data": child_data,
+                            "endpoint": processed_url,
+                            "fabric_name": fabric_name,
+                            "network_name": network_name
+                        })
+                    else:
+                        logger.error("Failed to fetch %s for network %s in fabric %s", child_name, network_name, fabric_name)
+                        endpoint_dict[child_name].append({
+                            "data": {},
+                            "endpoint": processed_url,
+                            "fabric_name": fabric_name,
+                            "network_name": network_name,
+                            "error": "Failed to fetch data"
+                        })
+
+                except Exception as e:
+                    logger.error("Error fetching %s for network %s in fabric %s: %s", child_name, network_name, fabric_name, str(e))
+                    endpoint_dict[child_name].append({
+                        "data": {},
+                        "endpoint": processed_url,
+                        "fabric_name": fabric_name,
+                        "network_name": network_name,
+                        "error": str(e)
+                    })
+
+    def _process_vrf_attachments_msd(self, parent_endpoint, endpoint_dict, fabric_name):
+        """
+        Process VRF_Attachments children endpoints for MSD fabrics.
+
+        Parameters:
+            parent_endpoint (dict): The parent VRF_Configuration endpoint.
+            endpoint_dict (dict): The dictionary containing the processed data.
+            fabric_name (str): The name of the fabric being processed.
+        """
+        parent_name = parent_endpoint["name"]
+        
+        # Find the data for this specific fabric
+        parent_data = None
+        for entry in endpoint_dict.get(parent_name, []):
+            if entry.get("fabric_name") == fabric_name:
+                parent_data = entry.get("data", [])
+                break
+
+        if not parent_data:
+            logger.warning("No parent data found for %s in fabric %s", parent_name, fabric_name)
+            return
+
+        # Extract VRF names
+        vrf_names = []
+        for vrf in parent_data:
+            if isinstance(vrf, dict):
+                vrf_name = vrf.get("vrfName")
+                if vrf_name:
+                    vrf_names.append(vrf_name)
+
+        if not vrf_names:
+            logger.info("No VRFs found for fabric %s", fabric_name)
+            return
+
+        logger.info("Found %d VRFs for fabric %s: %s", len(vrf_names), fabric_name, vrf_names)
+
+        # Process children endpoints for each VRF
+        for child_endpoint in parent_endpoint.get("children", []):
+            child_name = child_endpoint["name"]
+            child_url_template = child_endpoint["endpoint"]
+
+            # Initialize child endpoint in result dict
+            if child_name not in endpoint_dict:
+                endpoint_dict[child_name] = []
+
+            for vrf_name in vrf_names:
+                # Replace template placeholders
+                processed_url = child_url_template
+                if "{{vrf_name}}" in processed_url:
+                    processed_url = processed_url.replace("{{vrf_name}}", vrf_name)
+                if "%v" in processed_url:
+                    processed_url = processed_url.replace("%v", fabric_name)
+
+                logger.info("Fetching %s for VRF %s in fabric %s", child_name, vrf_name, fabric_name)
+                logger.debug("Child endpoint URL: %s", processed_url)
+
+                try:
+                    child_data = self.fetch_data(processed_url)
+                    if child_data is not None:
+                        logger.info("Successfully retrieved %s for VRF %s in fabric %s", child_name, vrf_name, fabric_name)
+                        endpoint_dict[child_name].append({
+                            "data": child_data,
+                            "endpoint": processed_url,
+                            "fabric_name": fabric_name,
+                            "vrf_name": vrf_name
+                        })
+                    else:
+                        logger.error("Failed to fetch %s for VRF %s in fabric %s", child_name, vrf_name, fabric_name)
+                        endpoint_dict[child_name].append({
+                            "data": {},
+                            "endpoint": processed_url,
+                            "fabric_name": fabric_name,
+                            "vrf_name": vrf_name,
+                            "error": "Failed to fetch data"
+                        })
+
+                except Exception as e:
+                    logger.error("Error fetching %s for VRF %s in fabric %s: %s", child_name, vrf_name, fabric_name, str(e))
+                    endpoint_dict[child_name].append({
+                        "data": {},
+                        "endpoint": processed_url,
+                        "fabric_name": fabric_name,
+                        "vrf_name": vrf_name,
+                        "error": str(e)
+                    })

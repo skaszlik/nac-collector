@@ -1,6 +1,10 @@
 # NDFC (Nexus Dashboard Fabric Controller) API Endpoints
 # This file contains sample endpoints for collecting configuration data from NDFC
 
+# Get MSD fabric-associations
+- name: MSD_Fabric_Associations
+  endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/control/fabrics/msd/fabric-associations
+
 # Fabric configuration (Note: %v will be replaced by fabric_name parameter)
 - name: Fabric_Configuration
   endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/control/fabrics/%v
