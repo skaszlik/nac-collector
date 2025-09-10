@@ -23,7 +23,7 @@ pip install git+https://github.com/netascode/nac-collector.git
 
 The tool supports two types of architectures:
 - **Controller-based**: SDWAN, ISE, NDO, FMC, CATALYSTCENTER (require `--url`)
-- **Device-based**: IOSXE, IOSXR (require `--devices-file`)
+- **Device-based**: IOSXE, IOSXR, NXOS (require `--devices-file`)
 
 ```
 Usage: nac-collector [OPTIONS]
@@ -31,7 +31,7 @@ Usage: nac-collector [OPTIONS]
 A CLI tool to collect various network configurations.
 
 Options:
-  * -s, --solution [SDWAN|ISE|NDO|FMC|CATALYSTCENTER|IOSXE|IOSXR]
+  * -s, --solution [SDWAN|ISE|NDO|FMC|CATALYSTCENTER|IOSXE|IOSXR|NXOS]
                         Solutions supported [required]
   * -u, --username TEXT Username for authentication [required]
                         [env var: NAC_USERNAME]
@@ -214,4 +214,58 @@ iosxr-configs.zip
 
 Each JSON file contains the complete configuration data in IOS-XR JSON unified model format. The tool automatically filters out timestamp headers and comments that may appear before the JSON data.
 
-**Note:** Device-based solutions like IOSXE and IOSXR do not use endpoint files (`--endpoints-file` and `--fetch-latest` are ignored).
+### NXOS (Device-Based Collection)
+
+NXOS uses a device-based architecture where configuration is collected directly from individual Nexus switches using REST API.
+
+**Supported Protocols:**
+- **REST** (only): Uses HTTPS API calls to `/api/mo/sys.json?rsp-subtree=full&rsp-prop-include=set-config-only`
+
+#### Device Inventory File
+
+Create a YAML file with your NXOS device inventory:
+
+```yaml
+- name: Switch1
+  target: https://switch1.example.com  # REST via HTTPS
+  username: admin
+  password: cisco123
+  protocol: rest  # default, can be omitted
+- name: Switch2
+  target: switch2.example.com  # HTTPS scheme will be added automatically
+  username: switch_admin
+  # password will use CLI default if not specified
+- name: Switch3
+  target: 10.1.1.3:443  # HTTPS with custom port
+  # username/password will use CLI defaults if not specified
+```
+
+#### Usage Examples
+
+```sh
+# Using device inventory file
+nac-collector -s NXOS --username admin --password cisco123 --devices-file switches.yaml -v DEBUG
+
+# Using environment variables for default credentials
+export NAC_USERNAME=admin
+export NAC_PASSWORD=cisco123
+nac-collector -s NXOS --devices-file switches.yaml -v DEBUG
+
+# Custom output file
+nac-collector -s NXOS --devices-file switches.yaml --output nxos-configs.zip
+```
+
+#### Output Format
+
+For NXOS collection, the output ZIP archive contains individual JSON files for each switch:
+
+```
+nxos-configs.zip
+├── Switch1.json
+├── Switch2.json
+└── Switch3.json
+```
+
+Each JSON file contains the complete configuration data in NXOS JSON format. The tool automatically handles aaaLogin authentication and session management for each device.
+
+**Note:** Device-based solutions like IOSXE, IOSXR, and NXOS do not use endpoint files (`--endpoints-file` and `--fetch-latest` are ignored).
