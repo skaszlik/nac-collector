@@ -1,0 +1,70 @@
+services:
+  # Test with Python 3.9
+  test-py39:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+      args:
+        PYTHON_VERSION: "3.9"
+    container_name: nac-collector-test-py39
+    volumes:
+      - .:/app
+    command: ["./run_tests.sh"]
+    environment:
+      - PYTHONPATH=/app
+
+  # Test with Python 3.10
+  test-py310:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+      args:
+        PYTHON_VERSION: "3.10"
+    container_name: nac-collector-test-py310
+    volumes:
+      - .:/app
+    command: ["./run_tests.sh"]
+    environment:
+      - PYTHONPATH=/app
+
+  # Test with Python 3.11 (default)
+  test-py311:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+      args:
+        PYTHON_VERSION: "3.11"
+    container_name: nac-collector-test-py311
+    volumes:
+      - .:/app
+    command: ["./run_tests.sh"]
+    environment:
+      - PYTHONPATH=/app
+
+  # Test with Python 3.12
+  test-py312:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+      args:
+        PYTHON_VERSION: "3.12"
+    container_name: nac-collector-test-py312
+    volumes:
+      - .:/app
+    command: ["./run_tests.sh"]
+    environment:
+      - PYTHONPATH=/app
+
+  # Lint only (runs pre-commit checks)
+  lint:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+      args:
+        PYTHON_VERSION: "3.11"
+    container_name: nac-collector-lint
+    volumes:
+      - .:/app
+    command: ["pre-commit", "run", "--all-files"]
+    environment:
+      - PYTHONPATH=/app

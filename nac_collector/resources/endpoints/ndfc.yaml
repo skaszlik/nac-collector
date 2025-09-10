@@ -1,0 +1,114 @@
+---
+# NDFC (Nexus Dashboard Fabric Controller) API Endpoints Configuration
+# This file defines the endpoints to collect data from NDFC controllers
+
+endpoints:
+  # Fabric Information
+  - name: "fabric_details"
+    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/control/fabrics/{fabric_name}"
+    description: "Get fabric configuration and details"
+
+  # Inventory and Topology
+  - name: "fabric_inventory"
+    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/inventory/allswitches/{fabric_name}"
+    description: "Get all switches in the fabric"
+
+  - name: "fabric_links"
+    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/{fabric_name}/links"
+    description: "Get fabric physical links"
+
+  - name: "fabric_topology"
+    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/{fabric_name}/topology"
+    description: "Get fabric topology information"
+
+  # Networks and VRFs
+  - name: "fabric_networks"
+    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/{fabric_name}/networks"
+    description: "Get all networks in the fabric"
+
+  - name: "fabric_vrfs"
+    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/{fabric_name}/vrfs"
+    description: "Get all VRFs in the fabric"
+
+  # Policies
+  - name: "fabric_policies"
+    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/{fabric_name}/policies"
+    description: "Get fabric-level policies"
+
+  - name: "network_policies"
+    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/{fabric_name}/networks/policies"
+    description: "Get network-specific policies"
+
+  - name: "vrf_policies"
+    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/{fabric_name}/vrfs/policies"
+    description: "Get VRF-specific policies"
+
+  # VPC (Virtual Port Channel) Configuration
+  - name: "vpc_policies"
+    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/{fabric_name}/vpc-policies"
+    description: "Get VPC policies and configuration"
+
+  - name: "vpc_interfaces"
+    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/{fabric_name}/vpc-interfaces"
+    description: "Get VPC interface configurations"
+
+  # MSD (Multi-Site Domain) Support
+  - name: "msd_topology"
+    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/{fabric_name}/msd"
+    description: "Get MSD topology information"
+
+  - name: "msd_fabrics"
+    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/msd/fabrics"
+    description: "Get all MSD fabrics"
+
+  # Interface Configuration
+  - name: "fabric_interfaces"
+    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/interface/all/{fabric_name}"
+    description: "Get all interface configurations"
+
+  - name: "lan_interfaces"
+    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/interface/lan/{fabric_name}"
+    description: "Get LAN interface configurations"
+
+  # BGP and Routing
+  - name: "bgp_neighbors"
+    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/{fabric_name}/bgp-neighbors"
+    description: "Get BGP neighbor configurations"
+
+  - name: "route_policies"
+    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/{fabric_name}/route-policies"
+    description: "Get routing policies"
+
+  # Templates and Configurations
+  - name: "fabric_templates"
+    endpoint: "/appcenter/cisco/ndfc/api/v1/configtemplate/rest/config/templates"
+    description: "Get configuration templates"
+
+  - name: "policy_templates"
+    endpoint: "/appcenter/cisco/ndfc/api/v1/configtemplate/rest/policy/templates"
+    description: "Get policy templates"
+
+  # Monitoring and Status
+  - name: "fabric_health"
+    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/control/fabrics/{fabric_name}/health"
+    description: "Get fabric health status"
+
+  - name: "switch_status"
+    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/inventory/switches/status/{fabric_name}"
+    description: "Get switch operational status"
+
+# Optional: Filter configuration
+filters:
+  exclude_templates:
+    - "Default_VRF_Universal"
+    - "Default_Network_Universal"
+    - "NA"
+    - "Default_VRF_Extension_Universal"
+    - "Default_Network_Extension_Universal"
+
+# Collection settings
+settings:
+  max_retries: 3
+  retry_delay: 2
+  timeout: 30
+  batch_size: 10

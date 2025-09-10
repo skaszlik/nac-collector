@@ -1,0 +1,43 @@
+# Multi-stage Dockerfile for testing NAC Collector
+# This mimics the GitHub Actions workflow test.yml
+
+ARG PYTHON_VERSION=3.11
+FROM python:${PYTHON_VERSION}-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Poetry
+RUN pip install poetry
+
+# Configure Poetry
+RUN poetry config virtualenvs.create false
+
+# Copy project files
+COPY pyproject.toml poetry.lock ./
+COPY .pre-commit-config.yaml ./
+
+# Install dependencies only (without the current project)
+RUN poetry lock && poetry install --no-root
+
+# Copy source code
+COPY . .
+
+# Install the current project now that all files are available
+RUN poetry install --only-root
+
+# Install pre-commit hooks (after Git repository is available)
+RUN pre-commit install
+
+# Create script to run tests
+RUN echo '#!/bin/bash\nset -e\n\necho "=== Running Pre-commit Checks ==="\npre-commit run --all-files\n\necho "=== Running Tests ==="\npoetry run pytest\n\necho "=== All tests passed! ===" ' > /app/run_tests.sh \
+    && chmod +x /app/run_tests.sh
+
+# Default command
+CMD ["/app/run_tests.sh"]
