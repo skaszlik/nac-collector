@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 import httpx
+import paramiko
 import pytest
 
 from nac_collector.device.ios_xe import CiscoClientIOSXE
@@ -14,14 +15,14 @@ def sample_devices():
     return [
         {
             "name": "Switch1",
-            "url": "https://switch1.example.com",
+            "target": "https://switch1.example.com",
             "username": "switch_user",
             "password": "switch_pass",
             "protocol": "restconf",
         },
         {
             "name": "Switch2",
-            "url": "https://switch2.example.com",
+            "target": "https://switch2.example.com",
         },
     ]
 
@@ -53,91 +54,30 @@ class TestCiscoClientIOSXEInit:
 
 
 class TestAuthenticateDevice:
-    @patch("httpx.Client")
-    def test_successful_authentication(self, mock_client_class, ios_xe_client):
-        # Setup mock response
-        mock_response = MagicMock()
-        mock_response.status_code = 200
+    def test_authenticate_device_always_returns_true(self, ios_xe_client):
+        # Authentication is now a no-op, should always return True
+        device = {"name": "TestDevice", "target": "https://test.example.com"}
+        result = ios_xe_client.authenticate_device(device)
+        assert result is True
 
-        # Setup mock client
-        mock_client = MagicMock()
-        mock_client.get.return_value = mock_response
-        mock_client_class.return_value.__enter__.return_value = mock_client
+    def test_authenticate_device_with_ssh_protocol(self, ios_xe_client):
+        # Should return True regardless of protocol
+        device = {"name": "TestDevice", "target": "test.example.com", "protocol": "ssh"}
+        result = ios_xe_client.authenticate_device(device)
+        assert result is True
 
+    def test_authenticate_device_with_restconf_protocol(self, ios_xe_client):
+        # Should return True regardless of protocol
         device = {
             "name": "TestDevice",
-            "url": "https://test.example.com",
-            "username": "test_user",
-            "password": "test_pass",
+            "target": "https://test.example.com",
+            "protocol": "restconf",
         }
-
         result = ios_xe_client.authenticate_device(device)
-
         assert result is True
-        mock_client.get.assert_called_once_with(
-            "https://test.example.com/.well-known/host-meta",
-            auth=("test_user", "test_pass"),
-            timeout=30,
-            headers={"Accept": "application/yang-data+json"},
-        )
-
-    @patch("httpx.Client")
-    def test_authentication_failure_401(self, mock_client_class, ios_xe_client):
-        # Setup mock response with 401
-        mock_response = MagicMock()
-        mock_response.status_code = 401
-
-        # Setup mock client
-        mock_client = MagicMock()
-        mock_client.get.return_value = mock_response
-        mock_client_class.return_value.__enter__.return_value = mock_client
-
-        device = {"name": "TestDevice", "url": "https://test.example.com"}
-
-        result = ios_xe_client.authenticate_device(device)
-
-        assert result is False
-
-    @patch("httpx.Client")
-    def test_authentication_connection_error(self, mock_client_class, ios_xe_client):
-        # Setup mock client to raise exception
-        mock_client = MagicMock()
-        mock_client.get.side_effect = httpx.ConnectError("Connection failed")
-        mock_client_class.return_value.__enter__.return_value = mock_client
-
-        device = {"name": "TestDevice", "url": "https://test.example.com"}
-
-        result = ios_xe_client.authenticate_device(device)
-
-        assert result is False
-
-    @patch("httpx.Client")
-    def test_authentication_uses_default_credentials(
-        self, mock_client_class, ios_xe_client
-    ):
-        # Setup mock response
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-
-        # Setup mock client
-        mock_client = MagicMock()
-        mock_client.get.return_value = mock_response
-        mock_client_class.return_value.__enter__.return_value = mock_client
-
-        device = {"name": "TestDevice", "url": "https://test.example.com"}
-
-        ios_xe_client.authenticate_device(device)
-
-        # Should use default credentials
-        mock_client.get.assert_called_once_with(
-            "https://test.example.com/.well-known/host-meta",
-            auth=("default_user", "default_pass"),
-            timeout=30,
-            headers={"Accept": "application/yang-data+json"},
-        )
 
 
-class TestCollectFromDevice:
+class TestCollectViaRestconf:
     @patch("httpx.Client")
     def test_successful_collection(self, mock_client_class, ios_xe_client):
         # Setup mock response with config data
@@ -158,12 +98,12 @@ class TestCollectFromDevice:
 
         device = {
             "name": "TestDevice",
-            "url": "https://test.example.com",
+            "target": "https://test.example.com",
             "username": "test_user",
             "password": "test_pass",
         }
 
-        result = ios_xe_client.collect_from_device(device)
+        result = ios_xe_client.collect_via_restconf(device)
 
         assert result is not None
         assert "Cisco-IOS-XE-native:native" in result
@@ -185,9 +125,9 @@ class TestCollectFromDevice:
         mock_client.get.return_value = mock_response
         mock_client_class.return_value.__enter__.return_value = mock_client
 
-        device = {"name": "TestDevice", "url": "https://test.example.com"}
+        device = {"name": "TestDevice", "target": "https://test.example.com"}
 
-        result = ios_xe_client.collect_from_device(device)
+        result = ios_xe_client.collect_via_restconf(device)
 
         assert result is not None
         assert "error" in result
@@ -200,42 +140,13 @@ class TestCollectFromDevice:
         mock_client.get.side_effect = httpx.TimeoutException("Request timeout")
         mock_client_class.return_value.__enter__.return_value = mock_client
 
-        device = {"name": "TestDevice", "url": "https://test.example.com"}
+        device = {"name": "TestDevice", "target": "https://test.example.com"}
 
-        result = ios_xe_client.collect_from_device(device)
+        result = ios_xe_client.collect_via_restconf(device)
 
         assert result is not None
         assert "error" in result
         assert "Collection failed - Request timeout" in result["error"]
-
-    @patch("httpx.Client")
-    def test_non_restconf_protocol_warning(self, mock_client_class, ios_xe_client):
-        # Setup mock response
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"config": "data"}
-
-        # Setup mock client
-        mock_client = MagicMock()
-        mock_client.get.return_value = mock_response
-        mock_client_class.return_value.__enter__.return_value = mock_client
-
-        device = {
-            "name": "TestDevice",
-            "url": "https://test.example.com",
-            "protocol": "netconf",  # Non-restconf protocol
-        }
-
-        with patch.object(ios_xe_client.logger, "warning") as mock_warning:
-            result = ios_xe_client.collect_from_device(device)
-
-            # Should log warning about unsupported protocol
-            mock_warning.assert_called_once_with(
-                "Protocol netconf not supported yet, using restconf"
-            )
-
-            # Should still collect successfully using restconf
-            assert result is not None
 
     @patch("httpx.Client")
     def test_uses_ssl_verify_setting(self, mock_client_class, ios_xe_client):
@@ -249,9 +160,9 @@ class TestCollectFromDevice:
         mock_client.get.return_value = mock_response
         mock_client_class.return_value.__enter__.return_value = mock_client
 
-        device = {"name": "TestDevice", "url": "https://test.example.com"}
+        device = {"name": "TestDevice", "target": "https://test.example.com"}
 
-        ios_xe_client.collect_from_device(device)
+        ios_xe_client.collect_via_restconf(device)
 
         # Verify client was created with correct ssl_verify setting
         mock_client_class.assert_called_once_with(
@@ -289,7 +200,7 @@ class TestIntegration:
 
         device = {
             "name": "Switch1",
-            "url": "https://switch1.example.com",
+            "target": "https://switch1.example.com",
             "username": "admin",
             "password": "cisco123",
         }
@@ -320,3 +231,285 @@ class TestConstants:
 
     def test_restconf_data_timeout_constant(self):
         assert CiscoClientIOSXE.RESTCONF_DATA_TIMEOUT == 120
+
+    def test_ssh_timeout_constant(self):
+        assert CiscoClientIOSXE.SSH_TIMEOUT == 60
+
+    def test_ssh_command_constant(self):
+        assert (
+            CiscoClientIOSXE.SSH_COMMAND == "show running-config | format restconf-json"
+        )
+
+
+class TestCollectViaSSH:
+    @patch("paramiko.SSHClient")
+    def test_successful_ssh_collection(self, mock_ssh_client_class, ios_xe_client):
+        # Setup mock SSH client
+        mock_ssh_client = MagicMock()
+        mock_ssh_client_class.return_value = mock_ssh_client
+
+        # Setup mock command execution with valid JSON output
+        mock_stdin = MagicMock()
+        mock_stdout = MagicMock()
+        mock_stderr = MagicMock()
+        mock_stdout.channel.recv_exit_status.return_value = 0
+
+        # SSH command returns data wrapped in a "data" element
+        json_output = '{"data": {"Cisco-IOS-XE-native:native": {"hostname": "TestDevice", "version": "17.3"}}}'
+        mock_stdout.read.return_value = json_output.encode("utf-8")
+        mock_ssh_client.exec_command.return_value = (
+            mock_stdin,
+            mock_stdout,
+            mock_stderr,
+        )
+
+        device = {
+            "name": "TestDevice",
+            "target": "switch1.example.com:2222",
+            "username": "test_user",
+            "password": "test_pass",
+        }
+
+        result = ios_xe_client.collect_via_ssh(device)
+
+        assert result is not None
+        assert "Cisco-IOS-XE-native:native" in result
+        assert result["Cisco-IOS-XE-native:native"]["hostname"] == "TestDevice"
+
+        mock_ssh_client.connect.assert_called_once_with(
+            hostname="switch1.example.com",
+            port=2222,
+            username="test_user",
+            password="test_pass",
+            timeout=60,
+            look_for_keys=False,
+            allow_agent=False,
+        )
+        mock_ssh_client.exec_command.assert_called_once_with(
+            "show running-config | format restconf-json"
+        )
+        mock_ssh_client.close.assert_called_once()
+
+    @patch("paramiko.SSHClient")
+    def test_successful_ssh_collection_without_data_wrapper(
+        self, mock_ssh_client_class, ios_xe_client
+    ):
+        # Test backward compatibility for SSH output without "data" wrapper
+        mock_ssh_client = MagicMock()
+        mock_ssh_client_class.return_value = mock_ssh_client
+
+        # Setup mock command execution with JSON output without "data" wrapper
+        mock_stdin = MagicMock()
+        mock_stdout = MagicMock()
+        mock_stderr = MagicMock()
+        mock_stdout.channel.recv_exit_status.return_value = 0
+
+        # Direct JSON output without "data" wrapper
+        json_output = '{"Cisco-IOS-XE-native:native": {"hostname": "TestDevice", "version": "17.3"}}'
+        mock_stdout.read.return_value = json_output.encode("utf-8")
+        mock_ssh_client.exec_command.return_value = (
+            mock_stdin,
+            mock_stdout,
+            mock_stderr,
+        )
+
+        device = {
+            "name": "TestDevice",
+            "target": "switch1.example.com",
+            "username": "test_user",
+            "password": "test_pass",
+        }
+
+        result = ios_xe_client.collect_via_ssh(device)
+
+        assert result is not None
+        assert "Cisco-IOS-XE-native:native" in result
+        assert result["Cisco-IOS-XE-native:native"]["hostname"] == "TestDevice"
+        mock_ssh_client.close.assert_called_once()
+
+    @patch("paramiko.SSHClient")
+    def test_ssh_command_failure(self, mock_ssh_client_class, ios_xe_client):
+        # Setup mock SSH client
+        mock_ssh_client = MagicMock()
+        mock_ssh_client_class.return_value = mock_ssh_client
+
+        # Setup mock command execution with failure
+        mock_stdin = MagicMock()
+        mock_stdout = MagicMock()
+        mock_stderr = MagicMock()
+        mock_stdout.channel.recv_exit_status.return_value = 1
+        mock_stderr.read.return_value = b"Command failed"
+        mock_ssh_client.exec_command.return_value = (
+            mock_stdin,
+            mock_stdout,
+            mock_stderr,
+        )
+
+        device = {"name": "TestDevice", "target": "switch1.example.com"}
+
+        result = ios_xe_client.collect_via_ssh(device)
+
+        assert result is not None
+        assert "error" in result
+        assert "SSH command failed with exit status 1" in result["error"]
+        mock_ssh_client.close.assert_called_once()
+
+    @patch("paramiko.SSHClient")
+    def test_ssh_invalid_json_output(self, mock_ssh_client_class, ios_xe_client):
+        # Setup mock SSH client
+        mock_ssh_client = MagicMock()
+        mock_ssh_client_class.return_value = mock_ssh_client
+
+        # Setup mock command execution with invalid JSON
+        mock_stdin = MagicMock()
+        mock_stdout = MagicMock()
+        mock_stderr = MagicMock()
+        mock_stdout.channel.recv_exit_status.return_value = 0
+        mock_stdout.read.return_value = b"Invalid JSON output"
+        mock_ssh_client.exec_command.return_value = (
+            mock_stdin,
+            mock_stdout,
+            mock_stderr,
+        )
+
+        device = {"name": "TestDevice", "target": "switch1.example.com"}
+
+        result = ios_xe_client.collect_via_ssh(device)
+
+        assert result is not None
+        assert "error" in result
+        assert "Failed to parse JSON output" in result["error"]
+        assert "raw_output" in result
+        mock_ssh_client.close.assert_called_once()
+
+    @patch("paramiko.SSHClient")
+    def test_ssh_no_output(self, mock_ssh_client_class, ios_xe_client):
+        # Setup mock SSH client
+        mock_ssh_client = MagicMock()
+        mock_ssh_client_class.return_value = mock_ssh_client
+
+        # Setup mock command execution with no output
+        mock_stdin = MagicMock()
+        mock_stdout = MagicMock()
+        mock_stderr = MagicMock()
+        mock_stdout.channel.recv_exit_status.return_value = 0
+        mock_stdout.read.return_value = b""
+        mock_ssh_client.exec_command.return_value = (
+            mock_stdin,
+            mock_stdout,
+            mock_stderr,
+        )
+
+        device = {"name": "TestDevice", "target": "switch1.example.com"}
+
+        result = ios_xe_client.collect_via_ssh(device)
+
+        assert result is not None
+        assert "error" in result
+        assert "No output received from SSH command" in result["error"]
+        mock_ssh_client.close.assert_called_once()
+
+    @patch("paramiko.SSHClient")
+    def test_ssh_connection_error_during_collection(
+        self, mock_ssh_client_class, ios_xe_client
+    ):
+        # Setup mock SSH client to raise connection error
+        mock_ssh_client = MagicMock()
+        mock_ssh_client_class.return_value = mock_ssh_client
+        mock_ssh_client.connect.side_effect = paramiko.SSHException("Connection failed")
+
+        device = {"name": "TestDevice", "target": "switch1.example.com"}
+
+        result = ios_xe_client.collect_via_ssh(device)
+
+        assert result is not None
+        assert "error" in result
+        assert "SSH connection error" in result["error"]
+        mock_ssh_client.close.assert_called_once()
+
+    def test_ssh_collection_invalid_target(self, ios_xe_client):
+        # Use a clearly invalid target that will fail hostname parsing
+        device = {"name": "TestDevice", "target": "ssh://[invalid"}
+
+        result = ios_xe_client.collect_via_ssh(device)
+
+        assert result is not None
+        assert "error" in result
+        assert "Invalid target format" in result["error"]
+
+    def test_ssh_collection_no_target(self, ios_xe_client):
+        device = {"name": "TestDevice"}
+
+        result = ios_xe_client.collect_via_ssh(device)
+
+        assert result is not None
+        assert "error" in result
+        assert "No target specified for device" in result["error"]
+
+
+class TestProtocolRouting:
+    def test_collect_from_device_routes_to_ssh(self, ios_xe_client):
+        device = {
+            "name": "TestDevice",
+            "protocol": "ssh",
+            "target": "switch1.example.com",
+        }
+        expected_result = {"config": "data"}
+
+        with patch.object(
+            ios_xe_client, "collect_via_ssh", return_value=expected_result
+        ) as mock_ssh_collect:
+            result = ios_xe_client.collect_from_device(device)
+
+            assert result == expected_result
+            mock_ssh_collect.assert_called_once_with(device)
+
+    def test_collect_from_device_routes_to_restconf(self, ios_xe_client):
+        device = {
+            "name": "TestDevice",
+            "protocol": "restconf",
+            "target": "https://switch1.example.com",
+        }
+        expected_result = {"config": "data"}
+
+        with patch.object(
+            ios_xe_client, "collect_via_restconf", return_value=expected_result
+        ) as mock_restconf_collect:
+            result = ios_xe_client.collect_from_device(device)
+
+            assert result == expected_result
+            mock_restconf_collect.assert_called_once_with(device)
+
+    def test_collect_from_device_defaults_to_restconf(self, ios_xe_client):
+        device = {"name": "TestDevice", "target": "https://switch1.example.com"}
+        expected_result = {"config": "data"}
+
+        with patch.object(
+            ios_xe_client, "collect_via_restconf", return_value=expected_result
+        ) as mock_restconf_collect:
+            result = ios_xe_client.collect_from_device(device)
+
+            assert result == expected_result
+            mock_restconf_collect.assert_called_once_with(device)
+
+    def test_collect_from_device_unsupported_protocol_falls_back_to_restconf(
+        self, ios_xe_client
+    ):
+        device = {
+            "name": "TestDevice",
+            "protocol": "netconf",
+            "target": "https://switch1.example.com",
+        }
+        expected_result = {"config": "data"}
+
+        with patch.object(
+            ios_xe_client, "collect_via_restconf", return_value=expected_result
+        ) as mock_restconf_collect:
+            with patch.object(ios_xe_client.logger, "warning") as mock_warning:
+                result = ios_xe_client.collect_from_device(device)
+
+                assert result == expected_result
+                mock_restconf_collect.assert_called_once_with(device)
+                mock_warning.assert_called_once_with(
+                    "Protocol netconf not supported, using restconf"
+                )
