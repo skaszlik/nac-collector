@@ -15,7 +15,7 @@ from nac_collector.controller.fmc import CiscoClientFMC
 from nac_collector.controller.ise import CiscoClientISE
 from nac_collector.controller.ndo import CiscoClientNDO
 from nac_collector.controller.sdwan import CiscoClientSDWAN
-from nac_collector.device.ios_xe import CiscoClientIOSXE
+from nac_collector.device.iosxe import CiscoClientIOSXE
 from nac_collector.device_inventory import load_devices_from_file
 from nac_collector.endpoint_resolver import EndpointResolver
 
@@ -211,7 +211,7 @@ def main(
 
         # Create appropriate client based on solution
         if solution == Solution.IOSXE:
-            ios_xe_client = CiscoClientIOSXE(
+            iosxe_client = CiscoClientIOSXE(
                 devices=devices,
                 default_username=username or "",
                 default_password=password or "",
@@ -221,7 +221,7 @@ def main(
                 ssl_verify=False,
             )
             # Collect from all devices and write to archive
-            ios_xe_client.collect_and_write_to_archive(output_file)
+            iosxe_client.collect_and_write_to_archive(output_file)
 
     # Handle existing controller-based solutions
     else:
