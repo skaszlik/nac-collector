@@ -222,7 +222,7 @@ class CiscoClientSDWAN(CiscoClientController):
         self, endpoint: dict[str, Any], endpoint_dict: dict[str, Any]
     ) -> dict[str, Any]:
         """
-        Process CLI device templates.
+        Process device template variables.
 
         Args:
             endpoint (dict): The endpoint to process.
@@ -234,6 +234,8 @@ class CiscoClientSDWAN(CiscoClientController):
             return endpoint_dict
 
         for item in response.json()["data"]:
+            if item["deviceType"] == "vsmart":
+                continue
             if item["devicesAttached"] != 0:
                 device_template_endpoint = (
                     endpoint["endpoint"] + "config/attached/" + str(item["templateId"])
