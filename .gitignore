@@ -80,3 +80,4 @@ tmp/
 logs/
 *.json
 *.zip
+.DS_Store
