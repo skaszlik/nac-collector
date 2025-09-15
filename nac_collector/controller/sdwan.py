@@ -283,12 +283,12 @@ class CiscoClientSDWAN(CiscoClientController):
                     continue
 
                 data = response.json()
-                if isinstance(data["data"], list):
+                if isinstance(data.get("data"), list):
                     for i in data["data"]:
                         try:
                             endpoint_dict[endpoint["name"]].append(
                                 {
-                                    "header": data["header"],
+                                    "header": data.get("header", {}),
                                     "data": i,
                                     "endpoint": device_template_endpoint,
                                 }
@@ -296,7 +296,7 @@ class CiscoClientSDWAN(CiscoClientController):
                         except TypeError:
                             endpoint_dict[endpoint["name"]].append(
                                 {
-                                    "header": data["header"],
+                                    "header": data.get("header", {}),
                                     "data": i,
                                     "endpoint": device_template_endpoint,
                                 }
@@ -304,8 +304,8 @@ class CiscoClientSDWAN(CiscoClientController):
                 else:
                     endpoint_dict[endpoint["name"]].append(
                         {
-                            "header": data["header"],
-                            "data": data["data"],
+                            "header": data.get("header", {}),
+                            "data": data.get("data", {}),
                             "endpoint": device_template_endpoint,
                         }
                     )
