@@ -3,99 +3,54 @@
 # This file defines the endpoints to collect data from NDFC controllers
 
 endpoints:
-  # Fabric Information
-  - name: "fabric_details"
-    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/control/fabrics/{fabric_name}"
-    description: "Get fabric configuration and details"
+  # Get MSD fabric-associations
+  - name: MSD_Fabric_Associations
+    endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/control/fabrics/msd/fabric-associations
 
-  # Inventory and Topology
-  - name: "fabric_inventory"
-    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/inventory/allswitches/{fabric_name}"
-    description: "Get all switches in the fabric"
+  # Fabric configuration (Note: %v will be replaced by fabric_name parameter)
+  - name: Fabric_Configuration
+    endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/control/fabrics/%v
 
-  - name: "fabric_links"
-    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/{fabric_name}/links"
-    description: "Get fabric physical links"
+  # Workflow for collecting policies bound to switches in a fabric:
 
-  - name: "fabric_topology"
-    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/{fabric_name}/topology"
-    description: "Get fabric topology information"
+  # Get all switches discovered in the fabric
+  - name: Discovered_Switches
+    endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/control/fabrics/%v/inventory
 
-  # Networks and VRFs
-  - name: "fabric_networks"
-    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/{fabric_name}/networks"
-    description: "Get all networks in the fabric"
+  # "vtep_vip" -> this field can not be mapped (no API endpoint available)
 
-  - name: "fabric_vrfs"
-    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/{fabric_name}/vrfs"
-    description: "Get all VRFs in the fabric"
+  # GET VPC CONFIGURATION.
+  # 1. Get all VPC pairs (all fabrics) then filter by discovered switch serial numbers (if peerOneId is in discovered switches, include the VPC pair)
+  - name: VPC_Pairs
+    endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/vpcpair?navId={{fabricID}}
+    children:
+    # 2. For each VPC pair, get the combined serial number of vPC Pair
+    - name: VPC_Combined_Serial_Number
+      endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/interface/vpcpair_serial_number?serial_number={{peerOneId}}
 
-  # Policies
-  - name: "fabric_policies"
-    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/{fabric_name}/policies"
-    description: "Get fabric-level policies"
+    # 3. For each VPC pair, get policies bound to the VPC pair filtering by the combined serial number
+    - name: VPC_Combined_Serial_Number
+      endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/interface
 
-  - name: "network_policies"
-    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/{fabric_name}/networks/policies"
-    description: "Get network-specific policies"
 
-  - name: "vrf_policies"
-    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/{fabric_name}/vrfs/policies"
-    description: "Get VRF-specific policies"
+  # Get all policies in the fabric (will be filtered by discovered switch serial numbers)
+  # Note: All policies are fetched and then filtered client-side based on discovered switch serial numbers
+  - name: Policies
+    endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/control/policies/pagination?fabricName=%v
 
-  # VPC (Virtual Port Channel) Configuration
-  - name: "vpc_policies"
-    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/{fabric_name}/vpc-policies"
-    description: "Get VPC policies and configuration"
+  # VRF configuration
+  - name: VRF_Configuration
+    endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/%v/vrfs
+    children:
+    - name: VRF_Attachments
+      endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/%v/vrfs/attachments?vrf-names={{vrf_name}}
 
-  - name: "vpc_interfaces"
-    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/{fabric_name}/vpc-interfaces"
-    description: "Get VPC interface configurations"
-
-  # MSD (Multi-Site Domain) Support
-  - name: "msd_topology"
-    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/{fabric_name}/msd"
-    description: "Get MSD topology information"
-
-  - name: "msd_fabrics"
-    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/msd/fabrics"
-    description: "Get all MSD fabrics"
-
-  # Interface Configuration
-  - name: "fabric_interfaces"
-    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/interface/all/{fabric_name}"
-    description: "Get all interface configurations"
-
-  - name: "lan_interfaces"
-    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/interface/lan/{fabric_name}"
-    description: "Get LAN interface configurations"
-
-  # BGP and Routing
-  - name: "bgp_neighbors"
-    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/{fabric_name}/bgp-neighbors"
-    description: "Get BGP neighbor configurations"
-
-  - name: "route_policies"
-    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/{fabric_name}/route-policies"
-    description: "Get routing policies"
-
-  # Templates and Configurations
-  - name: "fabric_templates"
-    endpoint: "/appcenter/cisco/ndfc/api/v1/configtemplate/rest/config/templates"
-    description: "Get configuration templates"
-
-  - name: "policy_templates"
-    endpoint: "/appcenter/cisco/ndfc/api/v1/configtemplate/rest/policy/templates"
-    description: "Get policy templates"
-
-  # Monitoring and Status
-  - name: "fabric_health"
-    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/control/fabrics/{fabric_name}/health"
-    description: "Get fabric health status"
-
-  - name: "switch_status"
-    endpoint: "/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/inventory/switches/status/{fabric_name}"
-    description: "Get switch operational status"
+  # Network configuration
+  - name: Network_Configuration
+    endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/%v/networks
+    children:
+    - name: Network_Attachments
+      endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/%v/networks/{{network_name}}/attachments
 
 # Optional: Filter configuration
 filters:
