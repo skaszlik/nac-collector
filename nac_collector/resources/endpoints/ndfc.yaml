@@ -17,9 +17,11 @@ endpoints:
   - name: Discovered_Switches
     endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/control/fabrics/%v/inventory
     children:  
-    # Interfaces configuration
-    - name: AccessEthernetPorts
-      endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/globalInterface?filter=underlayPolicies%3D%3Dint_access_host%26%26sysName%3D%3D{{hostName}}&navId={{fabricID}}
+      # Interfaces configuration
+      - name: AccessEthernetPorts
+        endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/globalInterface?filter=underlayPolicies%3D%3Dint_access_host%26%26sysName%3D%3D{{hostName}}&navId={{fabricID}}
+      - name: TrunkEthernetPorts
+        endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/globalInterface?filter=underlayPolicies%3D%3Dint_trunk_host%26%26sysName%3D%3D{{hostName}}&navId={{fabricID}}
 
 
   # "vtep_vip" -> this field can not be mapped (no API endpoint available)
@@ -29,13 +31,13 @@ endpoints:
   - name: VPC_Pairs
     endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/vpcpair?navId={{fabricID}}
     children:
-    # 2. For each VPC pair, get the combined serial number of vPC Pair
-    - name: VPC_Combined_Serial_Number
-      endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/interface/vpcpair_serial_number?serial_number={{peerOneId}}
+      # 2. For each VPC pair, get the combined serial number of vPC Pair
+      - name: VPC_Combined_Serial_Number
+        endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/interface/vpcpair_serial_number?serial_number={{peerOneId}}
 
-    # 3. For each VPC pair, get policies bound to the VPC pair filtering by the combined serial number
-    - name: VPC_Combined_Serial_Number
-      endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/interface
+      # 3. For each VPC pair, get policies bound to the VPC pair filtering by the combined serial number
+      - name: VPC_Combined_Serial_Number
+        endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/interface
 
 
   # Get all policies in the fabric (will be filtered by discovered switch serial numbers)
@@ -47,15 +49,15 @@ endpoints:
   - name: VRF_Configuration
     endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/%v/vrfs
     children:
-    - name: VRF_Attachments
-      endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/%v/vrfs/attachments?vrf-names={{vrf_name}}
+      - name: VRF_Attachments
+        endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/%v/vrfs/attachments?vrf-names={{vrf_name}}
 
   # Network configuration
   - name: Network_Configuration
     endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/%v/networks
     children:
-    - name: Network_Attachments
-      endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/%v/networks/{{network_name}}/attachments
+      - name: Network_Attachments
+        endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/%v/networks/{{network_name}}/attachments
 
 
 # Optional: Filter configuration
