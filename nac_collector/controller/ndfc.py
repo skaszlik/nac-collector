@@ -389,7 +389,7 @@ class CiscoClientNDFC(CiscoClientController):
                 
             result[endpoint_name].append({
                 "data": data if data is not None else {},
-                "endpoint": endpoint_url
+                "endpoint": endpoint_url,
             })
             logger.debug("Successfully processed MSD endpoint: %s", endpoint_name)
             
@@ -486,7 +486,8 @@ class CiscoClientNDFC(CiscoClientController):
             # Add fabric context for MSD scenarios
             result_entry = {
                 "data": data if data is not None else {},
-                "endpoint": endpoint_url
+                "endpoint": endpoint_url,
+                "fabric": self.fabric_name
             }
             
             if self.is_msd_fabric:
@@ -500,11 +501,14 @@ class CiscoClientNDFC(CiscoClientController):
                 logger.debug("Processing children endpoints for: %s", endpoint_name)
                 self._process_children_endpoints(endpoint, result)
             
+            
+            
         except Exception as e:
             logger.error("Error fetching data from %s: %s", endpoint_url, str(e))
             result_entry = {
                 "data": {},
-                "endpoint": endpoint_url,
+                "endpoint": endpoint.get("endpoint", ""),
+                "fabric": self.fabric_name,
                 "error": str(e)
             }
             
@@ -635,6 +639,7 @@ class CiscoClientNDFC(CiscoClientController):
                 {
                     "data": {},
                     "endpoint": endpoint_url,
+                    "fabric": self.fabric_name,
                     "error": "Discovered_Switches data not available",
                 }
             )
@@ -663,6 +668,7 @@ class CiscoClientNDFC(CiscoClientController):
                         {
                             "data": {},
                             "endpoint": endpoint_url,
+                            "fabric": self.fabric_name,
                             "error": "No serial numbers found in Discovered_Switches",
                         }
                     )
@@ -691,6 +697,7 @@ class CiscoClientNDFC(CiscoClientController):
                 endpoint_dict[endpoint_name].append(
                     {
                         "data": filtered_policies,
+                        "fabric": self.fabric_name,
                         "endpoint": endpoint_url,
                         "filtered_serial_numbers": serial_numbers,
                         "total_policies_received": len(all_policies_data)
@@ -719,6 +726,7 @@ class CiscoClientNDFC(CiscoClientController):
                     {
                         "data": {},
                         "endpoint": endpoint_url,
+                        "fabric": self.fabric_name,
                         "error": "Failed to fetch policies data",
                     }
                 )
@@ -726,7 +734,7 @@ class CiscoClientNDFC(CiscoClientController):
         except Exception as e:
             logger.error("Unexpected error fetching policies data: %s", str(e))
             endpoint_dict[endpoint_name].append(
-                {"data": {}, "endpoint": endpoint_url, "error": str(e)}
+                {"data": {}, "endpoint": endpoint_url, "fabric": self.fabric_name, "error": str(e)}
             )
 
     def _filter_by_discovered_Serial_numbers(
