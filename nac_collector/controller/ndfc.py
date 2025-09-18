@@ -1064,11 +1064,15 @@ class CiscoClientNDFC(CiscoClientController):
         parent_name = parent_endpoint["name"]
         logger.debug("Processing children endpoints for parent: %s", parent_name)
 
-        # Special handling for Network_Configuration endpoint
+        # Special handling for child endpoints based on parent type
         if parent_name == "Network_Configuration":
             self._process_network_attachments(parent_endpoint, endpoint_dict)
         elif parent_name == "VRF_Configuration":
             self._process_vrf_attachments(parent_endpoint, endpoint_dict)
+       
+        elif parent_name == "Discovered_Switches":
+            self._process_switch_interfaces(parent_endpoint, endpoint_dict)
+        
         else:
             # Generic children processing for other endpoints (if needed in the future)
             logger.warning("Generic children processing not yet implemented for: %s", parent_name)
@@ -1118,6 +1122,127 @@ class CiscoClientNDFC(CiscoClientController):
             logger.warning("Unexpected attachment data type: %s", type(attachment_data))
             return []
     
+    def _process_switch_interfaces(self, parent_endpoint, endpoint_dict):
+        """
+        Process interface children endpoints for Discovered_Switches.
+        Fetches interface data for each discovered switch and adds it to the switch data.
+
+        Parameters:
+            parent_endpoint (dict): The parent Discovered_Switches endpoint.
+            endpoint_dict (dict): The dictionary containing the processed data.
+        """
+        parent_name = parent_endpoint["name"]
+        
+        # Get the children endpoint configurations
+        children_endpoints = parent_endpoint.get("children", [])
+        
+        if not children_endpoints:
+            logger.debug("No children endpoints found for %s", parent_name)
+            return
+
+        logger.info("Processing %d children endpoints for %s", len(children_endpoints), parent_name)
+
+        # Process each Discovered_Switches entry
+        for config_index, config_entry in enumerate(endpoint_dict[parent_name]):
+            if not config_entry.get("data"):
+                continue
+            
+            # Handle both list and single object data structures
+            switches_data = config_entry["data"]
+            if not isinstance(switches_data, list):
+                switches_data = [switches_data] if switches_data else []
+            
+            # Process each switch in the data
+            for switch_index, switch in enumerate(switches_data):
+                # Skip switches without valid data (like the empty objects in the JSON)
+                if not switch or not isinstance(switch, dict) or not switch.get("hostName"):
+                    continue
+                
+                host_name = switch.get("hostName")
+                serial_number = switch.get("serialNumber")
+                
+                logger.debug("Processing interfaces for switch: %s (serial: %s)", host_name, serial_number)
+                
+                # Initialize interfaces container if not present or if it's null
+                if "interfaces" not in switch or switch["interfaces"] is None:
+                    switch["interfaces"] = {}
+                
+                # Process each child endpoint for this switch
+                for child_endpoint in children_endpoints:
+                    child_name = child_endpoint["name"]
+                    child_url = child_endpoint["endpoint"]
+                    
+                    logger.debug("Processing child endpoint %s for switch %s", child_name, host_name)
+                    
+                    # Replace placeholders in the URL
+                    if self.fabric_name and "%v" in child_url:
+                        child_url = child_url.replace("%v", self.fabric_name)
+                    
+                    if self.fabric_id and "{{fabricID}}" in child_url:
+                        child_url = child_url.replace("{{fabricID}}", str(self.fabric_id))
+                    
+                    if host_name and "{{hostName}}" in child_url:
+                        child_url = child_url.replace("{{hostName}}", host_name)
+                    
+                    if serial_number and "{{serialNumber}}" in child_url:
+                        child_url = child_url.replace("{{serialNumber}}", serial_number)
+                    
+                    logger.debug("Fetching %s interfaces from: %s", child_name, child_url)
+                    
+                    try:
+                        # Fetch the interface data
+                        interface_data = self.fetch_data(child_url)
+                        
+                        if interface_data is not None:
+                            logger.debug("Successfully retrieved %s for switch: %s", child_name, host_name)
+                            
+                            # Process the interface data (normalize structure)
+                            processed_interfaces = self._process_interface_data(interface_data)
+                            
+                            # Add the interface data to the switch under the child endpoint name
+                            switch["interfaces"][child_name] = processed_interfaces
+                            
+                            logger.info("Added %d %s interfaces for switch: %s", 
+                                      len(processed_interfaces) if isinstance(processed_interfaces, list) else 1, 
+                                      child_name, host_name)
+                        else:
+                            logger.warning("Failed to fetch %s for switch: %s", child_name, host_name)
+                            switch["interfaces"][child_name] = []
+                    
+                    except Exception as e:
+                        logger.error("Error fetching %s for switch %s: %s", child_name, host_name, str(e))
+                        switch["interfaces"][child_name] = []
+
+    def _process_interface_data(self, interface_data):
+        """
+        Process the raw interface data from the API response.
+        
+        Parameters:
+            interface_data (dict or list): Raw interface data from NDFC API.
+            
+        Returns:
+            list: Processed list of interfaces.
+        """
+        logger.debug("Processing interface data: %s", type(interface_data))
+        
+        # Handle different response structures
+        if isinstance(interface_data, list):
+            return interface_data
+        elif isinstance(interface_data, dict):
+            # Check for common NDFC response patterns
+            if "data" in interface_data:
+                data = interface_data["data"]
+                return data if isinstance(data, list) else [data] if data else []
+            elif "response" in interface_data:
+                data = interface_data["response"]
+                return data if isinstance(data, list) else [data] if data else []
+            else:
+                # Direct object response - wrap in list
+                return [interface_data]
+        else:
+            logger.warning("Unexpected interface data type: %s", type(interface_data))
+            return []
+
     def _process_vrf_attachments(self, parent_endpoint, endpoint_dict):
         """
         Process VRF_Attachments children endpoints for VRF_Configuration.
