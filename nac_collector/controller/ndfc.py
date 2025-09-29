@@ -1141,11 +1141,25 @@ class CiscoClientNDFC(CiscoClientController):
             return
 
         logger.info("Processing %d children endpoints for %s", len(children_endpoints), parent_name)
+        
+        # Debug: Check how many Discovered_Switches entries we have
+        total_entries = len(endpoint_dict[parent_name])
+        logger.debug("Found %d Discovered_Switches entries to process", total_entries)
 
         # Process each Discovered_Switches entry
         for config_index, config_entry in enumerate(endpoint_dict[parent_name]):
             if not config_entry.get("data"):
                 continue
+            
+            # In MSD scenarios, only process the entry that matches the current fabric context
+            # to avoid processing the same switches multiple times from accumulated entries
+            entry_fabric = config_entry.get("fabric")
+            if self.is_msd_fabric and entry_fabric and entry_fabric != self.fabric_name:
+                logger.debug("Skipping Discovered_Switches entry for fabric %s (currently processing %s)", 
+                           entry_fabric, self.fabric_name)
+                continue
+            
+            logger.debug("Processing Discovered_Switches entry %d for fabric %s", config_index, entry_fabric)
             
             # Handle both list and single object data structures
             switches_data = config_entry["data"]
@@ -1160,6 +1174,18 @@ class CiscoClientNDFC(CiscoClientController):
                 
                 host_name = switch.get("hostName")
                 serial_number = switch.get("serialNumber")
+                switch_fabric_name = switch.get("fabricName")
+                
+                # Skip switches that don't belong to the current fabric being processed
+                # This prevents duplicate processing in MSD deployments where switches 
+                # from other fabrics might be returned in the Discovered_Switches response
+                current_fabric = config_entry.get("fabric")
+                logger.debug("Switch fabric check: switch %s belongs to fabric %s, currently processing fabric %s", 
+                           host_name, switch_fabric_name, current_fabric)
+                if switch_fabric_name and current_fabric and switch_fabric_name != current_fabric:
+                    logger.debug("Skipping switch %s (belongs to fabric %s, currently processing fabric %s)", 
+                               host_name, switch_fabric_name, current_fabric)
+                    continue
                 
                 logger.debug("Processing interfaces for switch: %s (serial: %s)", host_name, serial_number)
                 
@@ -1174,12 +1200,17 @@ class CiscoClientNDFC(CiscoClientController):
                     
                     logger.debug("Processing child endpoint %s for switch %s", child_name, host_name)
                     
-                    # Replace placeholders in the URL
-                    if self.fabric_name and "%v" in child_url:
-                        child_url = child_url.replace("%v", self.fabric_name)
+                    # Get the switch's actual fabric information 
+                    switch_fabric_name = switch.get("fabricName")
+                    switch_fabric_id = switch.get("fid")
                     
-                    if self.fabric_id and "{{fabricID}}" in child_url:
-                        child_url = child_url.replace("{{fabricID}}", str(self.fabric_id))
+                    # Replace placeholders in the URL using switch's actual fabric info
+                    if switch_fabric_name and "%v" in child_url:
+                        child_url = child_url.replace("%v", switch_fabric_name)
+                    
+                    if switch_fabric_id and "{{fabricID}}" in child_url:
+                        child_url = child_url.replace("{{fabricID}}", str(switch_fabric_id))
+                        logger.debug("Using switch's fabric ID %s for %s in fabric %s", switch_fabric_id, host_name, switch_fabric_name)
                     
                     if host_name and "{{hostName}}" in child_url:
                         child_url = child_url.replace("{{hostName}}", host_name)
@@ -1200,7 +1231,9 @@ class CiscoClientNDFC(CiscoClientController):
                             processed_interfaces = self._process_interface_data(interface_data)
                             
                             # Add the interface data to the switch under the child endpoint name
-                            switch["interfaces"][child_name] = processed_interfaces
+                            if processed_interfaces: switch["interfaces"][child_name] = processed_interfaces
+                            
+                            logger.debug("Processed child name: %s", child_name)
                             
                             logger.info("Added %d %s interfaces for switch: %s", 
                                       len(processed_interfaces) if isinstance(processed_interfaces, list) else 1, 
