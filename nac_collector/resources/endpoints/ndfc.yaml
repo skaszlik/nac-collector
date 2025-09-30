@@ -22,6 +22,13 @@ endpoints:
         endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/globalInterface?filter=underlayPolicies==int_access_host&&sysName=={{hostName}}&navId={{fabricID}}
       - name: TrunkEthernetPorts
         endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/globalInterface?filter=mode%3D%3Dtrunk%26%26sysName%3D%3D{{hostName}}%26%26underlayPolicies%3D%3Dint_trunk_host&navId={{fabricID}}
+      - name: TrunkPort-Channel
+        endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/globalInterface?filter=vpcId%21%3D0%26%26sysName%3D%3D{{hostName}}%26%26underlayPolicies%3D%3Dint_vpc_trunk_po_11_1&navId={{fabricID}}
+        # https://10.62.188.70/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/globalInterface?sort=vpcId%3AASC&filter=vpcId%21%3D0%26%26underlayPolicies%3D%3Dint_vpc_trunk_po_11_1&navId=36
+      - name: AccessPort-Channel
+        endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/globalInterface?filter=vpcId%21%3D0%26%26sysName%3D%3D{{hostName}}%26%26mode%3D%3Daccess&navId={{fabricID}}
+
+        
 
   # "vtep_vip" -> this field can not be mapped (no API endpoint available)
 
