@@ -24,9 +24,11 @@ endpoints:
         endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/globalInterface?filter=mode%3D%3Dtrunk%26%26sysName%3D%3D{{hostName}}%26%26underlayPolicies%3D%3Dint_trunk_host&navId={{fabricID}}
       - name: TrunkPort-Channel
         endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/globalInterface?filter=vpcId%21%3D0%26%26sysName%3D%3D{{hostName}}%26%26underlayPolicies%3D%3Dint_vpc_trunk_po_11_1&navId={{fabricID}}
-        # https://10.62.188.70/appcenter/cisco/ndfc/api/v1/lan-fabric/rest/globalInterface?sort=vpcId%3AASC&filter=vpcId%21%3D0%26%26underlayPolicies%3D%3Dint_vpc_trunk_po_11_1&navId=36
-      - name: AccessPort-Channel
-        endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/globalInterface?filter=vpcId%21%3D0%26%26sysName%3D%3D{{hostName}}%26%26mode%3D%3Daccess&navId={{fabricID}}
+        children:
+          - name: vPCInterfaceSetting
+            endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/globalInterface/pti/nvpairs?serialNumber={{vpcPair}}&interfaceName={{vPC_name}}&policyName=int_vpc_trunk_host
+      # - name: AccessPort-Channel
+      #   endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/globalInterface?filter=vpcId%21%3D0%26%26sysName%3D%3D{{hostName}}%26%26mode%3D%3Daccess&navId={{fabricID}}
 
         
 
@@ -71,13 +73,13 @@ filters:
   exclude_templates:
     - "Default_VRF_Universal"
     - "Default_Network_Universal"
-    - "NA"
+    - "NA" #??? to be tsted
     - "Default_VRF_Extension_Universal"
     - "Default_Network_Extension_Universal"
 
 # Collection settings
-settings:
-  max_retries: 3
-  retry_delay: 2
-  timeout: 30
-  batch_size: 10
+# settings:
+#   max_retries: 3
+#   retry_delay: 2
+#   timeout: 30
+#   batch_size: 10

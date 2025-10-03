@@ -1072,6 +1072,8 @@ class CiscoClientNDFC(CiscoClientController):
        
         elif parent_name == "Discovered_Switches":
             self._process_switch_interfaces(parent_endpoint, endpoint_dict)
+        elif parent_name == "TrunkPort-Channel":
+            self._process_trunk_port_channel_children(parent_endpoint, endpoint_dict)
         
         else:
             # Generic children processing for other endpoints (if needed in the future)
@@ -1231,7 +1233,13 @@ class CiscoClientNDFC(CiscoClientController):
                             processed_interfaces = self._process_interface_data(interface_data)
                             
                             # Add the interface data to the switch under the child endpoint name
-                            if processed_interfaces: switch["interfaces"][child_name] = processed_interfaces
+                            if processed_interfaces: 
+                                switch["interfaces"][child_name] = processed_interfaces
+                                
+                                # Check if this child endpoint has its own children (nested children)
+                                if "children" in child_endpoint and isinstance(child_endpoint["children"], list):
+                                    logger.debug("Processing nested children for %s on switch %s", child_name, host_name)
+                                    self._process_nested_children_for_interfaces(child_endpoint, processed_interfaces, host_name)
                             
                             logger.debug("Processed child name: %s", child_name)
                             
@@ -1441,6 +1449,197 @@ class CiscoClientNDFC(CiscoClientController):
                         logger.debug("Skipping network %s with status: %s", network_name or "unnamed", network_status)
                     else:
                         logger.debug("Skipping network with missing networkName")
+
+    def _process_trunk_port_channel_children(self, parent_endpoint, endpoint_dict):
+        """
+        Process children endpoints for TrunkPort-Channel.
+        Fetches vPCInterfaceSetting data for each TrunkPort-Channel interface.
+
+        Parameters:
+            parent_endpoint (dict): The parent TrunkPort-Channel endpoint.
+            endpoint_dict (dict): The dictionary containing the processed data.
+        """
+        parent_name = parent_endpoint["name"]
+        
+        # Get the children endpoint configurations
+        children_endpoints = parent_endpoint.get("children", [])
+        
+        if not children_endpoints:
+            logger.debug("No children endpoints defined for %s", parent_name)
+            return
+
+        logger.info("Processing %d children endpoints for %s", len(children_endpoints), parent_name)
+        
+        # Get TrunkPort-Channel data from the endpoint_dict
+        trunk_port_channels = endpoint_dict.get(parent_name, [])
+        
+        if not trunk_port_channels:
+            logger.warning("No TrunkPort-Channel data found to process children for")
+            return
+
+        # Process each TrunkPort-Channel interface
+        processed_count = 0
+        for trunk_pc_data in trunk_port_channels:
+            # Extract vpcEntityId which contains the pattern "serial1~serial2~vpcX"
+            vpc_entity_id = trunk_pc_data.get("vpcEntityId")
+            
+            if not vpc_entity_id:
+                logger.debug("No vpcEntityId found in TrunkPort-Channel data, skipping")
+                continue
+
+            # Parse the vpcEntityId to extract vpcPair and vPC_name
+            vpc_pair, vpc_name = self._parse_vpc_entity_id(vpc_entity_id)
+            
+            if not vpc_pair or not vpc_name:
+                logger.warning("Failed to parse vpcEntityId: %s", vpc_entity_id)
+                continue
+
+            logger.debug("Processing TrunkPort-Channel children for vpcPair=%s, vPC_name=%s", vpc_pair, vpc_name)
+
+            # Process each child endpoint
+            for child_endpoint in children_endpoints:
+                child_name = child_endpoint["name"]
+                child_url = child_endpoint["endpoint"]
+
+                # Replace variables in the child endpoint URL
+                child_url = child_url.replace("{{vpcPair}}", vpc_pair)
+                child_url = child_url.replace("{{vPC_name}}", vpc_name)
+
+                # Replace fabric ID if present
+                if self.fabric_id and "{{fabricID}}" in child_url:
+                    child_url = child_url.replace("{{fabricID}}", str(self.fabric_id))
+
+                logger.debug("Fetching child endpoint: %s -> %s", child_name, child_url)
+
+                try:
+                    response = self.client.get(f"{self.base_url}{child_url}")
+                    response.raise_for_status()
+                    child_data = response.json()
+
+                    # Save child data directly to the TrunkPort-Channel entry using the child endpoint name as key
+                    trunk_pc_data[child_name] = child_data
+
+                    processed_count += 1
+                    logger.debug("Successfully processed and saved child endpoint %s to TrunkPort-Channel entry for %s", child_name, vpc_name)
+
+                except Exception as e:
+                    logger.error("Error processing child endpoint %s for %s: %s", child_name, vpc_name, str(e))
+                    # Set empty data on error to maintain consistent structure
+                    trunk_pc_data[child_name] = {}
+
+        logger.info("Completed processing TrunkPort-Channel children. Processed %d items", processed_count)
+
+    def _process_nested_children_for_interfaces(self, parent_endpoint, interface_data, host_name):
+        """
+        Process nested children endpoints for interface data (like TrunkPort-Channel -> vPCInterfaceSetting).
+        
+        Parameters:
+            parent_endpoint (dict): The parent endpoint configuration with children
+            interface_data (list): The interface data from the parent endpoint 
+            host_name (str): The hostname of the switch being processed
+        """
+        parent_name = parent_endpoint["name"]
+        children_endpoints = parent_endpoint.get("children", [])
+        
+        if not children_endpoints:
+            return
+            
+        logger.info("Processing %d nested children for %s interfaces on switch %s", 
+                   len(children_endpoints), parent_name, host_name)
+        
+        # Process each interface entry in the interface_data
+        for interface_entry in interface_data if isinstance(interface_data, list) else [interface_data]:
+            if not isinstance(interface_entry, dict):
+                continue
+                
+            # For TrunkPort-Channel, look for vpcEntityId
+            if parent_name == "TrunkPort-Channel":
+                vpc_entity_id = interface_entry.get("vpcEntityId")
+                
+                if not vpc_entity_id:
+                    logger.debug("No vpcEntityId found in TrunkPort-Channel interface, skipping nested children")
+                    continue
+                
+                # Parse the vpcEntityId to extract vpcPair and vPC_name
+                vpc_pair, vpc_name = self._parse_vpc_entity_id(vpc_entity_id)
+                
+                if not vpc_pair or not vpc_name:
+                    logger.warning("Failed to parse vpcEntityId: %s", vpc_entity_id)
+                    continue
+                
+                logger.debug("Processing nested children for vpcPair=%s, vPC_name=%s on switch %s", 
+                           vpc_pair, vpc_name, host_name)
+                
+                # Process each nested child endpoint
+                for child_endpoint in children_endpoints:
+                    child_name = child_endpoint["name"]
+                    child_url = child_endpoint["endpoint"]
+                    
+                    # Replace variables in the child endpoint URL
+                    child_url = child_url.replace("{{vpcPair}}", vpc_pair)
+                    child_url = child_url.replace("{{vPC_name}}", vpc_name)
+                    
+                    # Replace fabric ID if present
+                    if self.fabric_id and "{{fabricID}}" in child_url:
+                        child_url = child_url.replace("{{fabricID}}", str(self.fabric_id))
+                    
+                    logger.debug("Fetching nested child endpoint: %s -> %s", child_name, child_url)
+                    
+                    try:
+                        response = self.client.get(f"{self.base_url}{child_url}")
+                        response.raise_for_status()
+                        child_data = response.json()
+                        
+                        # Save child data directly to the interface entry using the child endpoint name as key
+                        interface_entry[child_name] = child_data
+                        
+                        logger.debug("Successfully processed and saved nested child endpoint %s to interface entry for %s on switch %s", 
+                                   child_name, vpc_name, host_name)
+                        
+                    except Exception as e:
+                        logger.error("Error processing nested child endpoint %s for %s on switch %s: %s", 
+                                   child_name, vpc_name, host_name, str(e))
+                        # Set empty data on error to maintain consistent structure
+                        interface_entry[child_name] = {}
+
+    def _parse_vpc_entity_id(self, vpc_entity_id: str) -> tuple:
+        """
+        Parse vpcEntityId string to extract vpcPair and vPC_name.
+        
+        Expected format: "serial1~serial2~vpcX"
+        Example: "FDO26260888~FDO26260897~vpc10"
+        
+        Parameters:
+            vpc_entity_id (str): The vpcEntityId string to parse
+            
+        Returns:
+            tuple: (vpcPair, vPC_name) where vpcPair is "serial1~serial2" and vPC_name is "vpcX"
+        """
+        if not vpc_entity_id or not isinstance(vpc_entity_id, str):
+            logger.warning("Invalid vpcEntityId provided: %s", vpc_entity_id)
+            return None, None
+
+        # Split by '~' to get components
+        parts = vpc_entity_id.split('~')
+        
+        if len(parts) != 3:
+            logger.warning("vpcEntityId does not have expected format 'serial1~serial2~vpcX': %s", vpc_entity_id)
+            return None, None
+
+        # Extract components
+        serial1, serial2, vpc_name = parts
+        
+        # Validate that vpc_name starts with "vpc"
+        if not vpc_name.startswith("vpc"):
+            logger.warning("vPC name does not start with 'vpc': %s", vpc_name)
+            return None, None
+
+        # Construct vpcPair as "serial1~serial2"
+        vpc_pair = f"{serial1}~{serial2}"
+        
+        logger.debug("Parsed vpcEntityId '%s' -> vpcPair='%s', vPC_name='%s'", vpc_entity_id, vpc_pair, vpc_name)
+        
+        return vpc_pair, vpc_name
 
     def load_endpoints_from_file(self, endpoints_file: str) -> List[Dict[str, Any]]:
         """
