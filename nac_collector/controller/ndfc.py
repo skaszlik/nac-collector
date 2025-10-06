@@ -31,6 +31,16 @@ class CiscoClientNDFC(CiscoClientController):
         "AccessPort-Channel"
         # Add new Port-Channel interface types here as needed
     ]
+    
+    # Interface types that use serial number + interface name processing logic
+    # These interface types must have:
+    # 1. 'serialNo' and 'ifName' fields in the interface data
+    # 2. Children endpoints defined in YAML configuration that use {{serialNumber}} and {{ifName}} placeholders
+    # 3. The same processing pattern for child endpoints like LoopbackInterfaceSetting
+    SERIAL_INTERFACE_TYPES = [
+        "LoopbackInterfaces"
+        # Add new serial-based interface types here as needed
+    ]
 
     def __init__(self, **kwargs):
         """
@@ -1084,6 +1094,7 @@ class CiscoClientNDFC(CiscoClientController):
         elif parent_name == "Discovered_Switches":
             self._process_switch_interfaces(parent_endpoint, endpoint_dict)
         elif parent_name in self.PORT_CHANNEL_INTERFACE_TYPES:
+            # Handle Port-Channel interfaces that use vpcEntityId pattern
             self._process_port_channel_children(parent_endpoint, endpoint_dict)
         
         else:
@@ -1549,6 +1560,89 @@ class CiscoClientNDFC(CiscoClientController):
 
         logger.info("Completed processing %s children. Processed %d items", parent_name, processed_count)
 
+    def _process_serial_interface_children(self, parent_endpoint, endpoint_dict):
+        """
+        Process children endpoints for interface types that use serialNumber + ifName pattern.
+        Fetches child endpoint data (like LoopbackInterfaceSetting) for each interface.
+        
+        This method handles all interface types that:
+        1. Have 'serialNo' and 'ifName' fields in the interface data
+        2. Are defined in the SERIAL_INTERFACE_TYPES class constant
+        3. Use {{serialNumber}} and {{ifName}} placeholders in child endpoints
+        
+        To add support for new serial-based interface types:
+        1. Add the interface type name to SERIAL_INTERFACE_TYPES constant
+        2. Define the interface endpoint and children in the YAML configuration
+        3. No code changes are required as this method handles them generically
+
+        Parameters:
+            parent_endpoint (dict): The parent interface endpoint.
+            endpoint_dict (dict): The dictionary containing the processed data.
+        """
+        parent_name = parent_endpoint["name"]
+        
+        # Get the children endpoint configurations
+        children_endpoints = parent_endpoint.get("children", [])
+        
+        if not children_endpoints:
+            logger.debug("No children endpoints defined for %s", parent_name)
+            return
+
+        logger.info("Processing %d children endpoints for %s", len(children_endpoints), parent_name)
+        
+        # Get interface data from the endpoint_dict
+        interfaces = endpoint_dict.get(parent_name, [])
+        
+        if not interfaces:
+            logger.warning("No %s data found to process children for", parent_name)
+            return
+
+        # Process each interface
+        processed_count = 0
+        for interface_data in interfaces:
+            # Extract serialNo and ifName from the interface data
+            serial_number = interface_data.get("serialNo")
+            if_name = interface_data.get("ifName")
+            
+            if not serial_number or not if_name:
+                logger.debug("Missing serialNo or ifName in %s data, skipping", parent_name)
+                continue
+
+            logger.debug("Processing %s children for serialNumber=%s, ifName=%s", parent_name, serial_number, if_name)
+
+            # Process each child endpoint
+            for child_endpoint in children_endpoints:
+                child_name = child_endpoint["name"]
+                child_url = child_endpoint["endpoint"]
+
+                # Replace variables in the child endpoint URL
+                child_url = child_url.replace("{{serialNumber}}", serial_number)
+                child_url = child_url.replace("{{ifName}}", if_name)
+
+                # Replace fabric ID if present
+                if self.fabric_id and "{{fabricID}}" in child_url:
+                    child_url = child_url.replace("{{fabricID}}", str(self.fabric_id))
+
+                logger.debug("Fetching child endpoint: %s -> %s", child_name, child_url)
+
+                try:
+                    response = self.client.get(f"{self.base_url}{child_url}")
+                    response.raise_for_status()
+                    child_data = response.json()
+
+                    # Save child data directly to the interface entry using the child endpoint name as key
+                    interface_data[child_name] = child_data
+
+                    processed_count += 1
+                    logger.debug("Successfully processed and saved child endpoint %s to %s entry for %s", child_name, parent_name, if_name)
+
+                except Exception as e:
+                    logger.error("Error processing child endpoint %s for %s: %s", child_name, if_name, str(e))
+                    # Set empty data on error to maintain consistent structure
+                    interface_data[child_name] = {}
+
+        logger.info("Completed processing %s children. Processed %d items", parent_name, processed_count)
+
     def _process_nested_children_for_interfaces(self, parent_endpoint, interface_data, host_name):
         """
         Process nested children endpoints for interface data (like Port-Channel interfaces -> vPCInterfaceSetting).
@@ -1619,6 +1713,50 @@ class CiscoClientNDFC(CiscoClientController):
                     except Exception as e:
                         logger.error("Error processing nested child endpoint %s for %s on switch %s: %s", 
                                    child_name, vpc_name, host_name, str(e))
+                        # Set empty data on error to maintain consistent structure
+                        interface_entry[child_name] = {}
+                        
+            # For serial-based interfaces (LoopbackInterfaces, etc.), look for serialNo and ifName
+            elif parent_name in self.SERIAL_INTERFACE_TYPES:
+                serial_number = interface_entry.get("serialNo")
+                if_name = interface_entry.get("ifName")
+                
+                if not serial_number or not if_name:
+                    logger.debug("No serialNo or ifName found in %s interface, skipping nested children", parent_name)
+                    continue
+                
+                logger.debug("Processing nested children for serialNumber=%s, ifName=%s on switch %s", 
+                           serial_number, if_name, host_name)
+                
+                # Process each nested child endpoint
+                for child_endpoint in children_endpoints:
+                    child_name = child_endpoint["name"]
+                    child_url = child_endpoint["endpoint"]
+                    
+                    # Replace variables in the child endpoint URL
+                    child_url = child_url.replace("{{serialNumber}}", serial_number)
+                    child_url = child_url.replace("{{ifName}}", if_name)
+                    
+                    # Replace fabric ID if present
+                    if self.fabric_id and "{{fabricID}}" in child_url:
+                        child_url = child_url.replace("{{fabricID}}", str(self.fabric_id))
+                    
+                    logger.debug("Fetching nested child endpoint: %s -> %s", child_name, child_url)
+                    
+                    try:
+                        response = self.client.get(f"{self.base_url}{child_url}")
+                        response.raise_for_status()
+                        child_data = response.json()
+                        
+                        # Save child data directly to the interface entry using the child endpoint name as key
+                        interface_entry[child_name] = child_data
+                        
+                        logger.debug("Successfully processed and saved nested child endpoint %s to interface entry for %s on switch %s", 
+                                   child_name, if_name, host_name)
+                        
+                    except Exception as e:
+                        logger.error("Error processing nested child endpoint %s for %s on switch %s: %s", 
+                                   child_name, if_name, host_name, str(e))
                         # Set empty data on error to maintain consistent structure
                         interface_entry[child_name] = {}
 
