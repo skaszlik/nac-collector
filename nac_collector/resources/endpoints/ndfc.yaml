@@ -27,8 +27,11 @@ endpoints:
         children:
           - name: vPCInterfaceSetting
             endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/globalInterface/pti/nvpairs?serialNumber={{vpcPair}}&interfaceName={{vPC_name}}&policyName=int_vpc_trunk_host
-      # - name: AccessPort-Channel
-      #   endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/globalInterface?filter=vpcId%21%3D0%26%26sysName%3D%3D{{hostName}}%26%26mode%3D%3Daccess&navId={{fabricID}}
+      - name: AccessPort-Channel
+        endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/globalInterface?filter=vpcId%21%3D0%26%26sysName%3D%3D{{hostName}}%26%26underlayPolicies%3D%3Dint_vpc_access_po_11_1&navId={{fabricID}}
+        children:
+          - name: vPCInterfaceSetting
+            endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/globalInterface/pti/nvpairs?serialNumber={{vpcPair}}&interfaceName={{vPC_name}}&policyName=int_vpc_access_host
 
         
 
