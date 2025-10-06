@@ -169,6 +169,7 @@ def main(
         str,
         typer.Option(
             "--domain",
+            envvar="NAC_DOMAIN",
             help="Domain for NDFC authentication (default: local)",
         ),
     ] = "local",
@@ -176,6 +177,7 @@ def main(
         str | None,
         typer.Option(
             "--fabric-name",
+            envvar="NAC_FABRIC_NAME",
             help="Fabric name for NDFC data collection",
         ),
     ] = None,
