@@ -20,6 +20,17 @@ class CiscoClientNDFC(CiscoClientController):
     NDFC Controller client for collecting data from Cisco Nexus Dashboard Fabric Controller.
     Extends the base CiscoClientController with NDFC-specific authentication and data collection methods.
     """
+    
+    # Interface types that use Port-Channel processing logic with vpcEntityId
+    # These interface types must have:
+    # 1. A 'vpcEntityId' field with format "serial1~serial2~vpcX" 
+    # 2. Children endpoints defined in YAML configuration
+    # 3. The same processing pattern for child endpoints like vPCInterfaceSetting
+    PORT_CHANNEL_INTERFACE_TYPES = [
+        "TrunkPort-Channel",
+        "AccessPort-Channel"
+        # Add new Port-Channel interface types here as needed
+    ]
 
     def __init__(self, **kwargs):
         """
@@ -1072,8 +1083,8 @@ class CiscoClientNDFC(CiscoClientController):
        
         elif parent_name == "Discovered_Switches":
             self._process_switch_interfaces(parent_endpoint, endpoint_dict)
-        elif parent_name == "TrunkPort-Channel":
-            self._process_trunk_port_channel_children(parent_endpoint, endpoint_dict)
+        elif parent_name in self.PORT_CHANNEL_INTERFACE_TYPES:
+            self._process_port_channel_children(parent_endpoint, endpoint_dict)
         
         else:
             # Generic children processing for other endpoints (if needed in the future)
@@ -1450,13 +1461,22 @@ class CiscoClientNDFC(CiscoClientController):
                     else:
                         logger.debug("Skipping network with missing networkName")
 
-    def _process_trunk_port_channel_children(self, parent_endpoint, endpoint_dict):
+    def _process_port_channel_children(self, parent_endpoint, endpoint_dict):
         """
-        Process children endpoints for TrunkPort-Channel.
-        Fetches vPCInterfaceSetting data for each TrunkPort-Channel interface.
+        Process children endpoints for Port-Channel interface types (TrunkPort-Channel, AccessPort-Channel, etc.).
+        Fetches child endpoint data (like vPCInterfaceSetting) for each Port-Channel interface.
+        
+        This method handles all interface types that:
+        1. Have a 'vpcEntityId' field with format "serial1~serial2~vpcX"
+        2. Are defined in the PORT_CHANNEL_INTERFACE_TYPES class constant
+        
+        To add support for new Port-Channel interface types:
+        1. Add the interface type name to PORT_CHANNEL_INTERFACE_TYPES constant
+        2. Define the interface endpoint and children in the YAML configuration
+        3. No code changes are required as this method handles them generically
 
         Parameters:
-            parent_endpoint (dict): The parent TrunkPort-Channel endpoint.
+            parent_endpoint (dict): The parent Port-Channel endpoint.
             endpoint_dict (dict): The dictionary containing the processed data.
         """
         parent_name = parent_endpoint["name"]
@@ -1470,21 +1490,21 @@ class CiscoClientNDFC(CiscoClientController):
 
         logger.info("Processing %d children endpoints for %s", len(children_endpoints), parent_name)
         
-        # Get TrunkPort-Channel data from the endpoint_dict
-        trunk_port_channels = endpoint_dict.get(parent_name, [])
+        # Get Port-Channel data from the endpoint_dict
+        port_channels = endpoint_dict.get(parent_name, [])
         
-        if not trunk_port_channels:
-            logger.warning("No TrunkPort-Channel data found to process children for")
+        if not port_channels:
+            logger.warning("No %s data found to process children for", parent_name)
             return
 
-        # Process each TrunkPort-Channel interface
+        # Process each Port-Channel interface
         processed_count = 0
-        for trunk_pc_data in trunk_port_channels:
+        for port_channel_data in port_channels:
             # Extract vpcEntityId which contains the pattern "serial1~serial2~vpcX"
-            vpc_entity_id = trunk_pc_data.get("vpcEntityId")
+            vpc_entity_id = port_channel_data.get("vpcEntityId")
             
             if not vpc_entity_id:
-                logger.debug("No vpcEntityId found in TrunkPort-Channel data, skipping")
+                logger.debug("No vpcEntityId found in %s data, skipping", parent_name)
                 continue
 
             # Parse the vpcEntityId to extract vpcPair and vPC_name
@@ -1494,7 +1514,7 @@ class CiscoClientNDFC(CiscoClientController):
                 logger.warning("Failed to parse vpcEntityId: %s", vpc_entity_id)
                 continue
 
-            logger.debug("Processing TrunkPort-Channel children for vpcPair=%s, vPC_name=%s", vpc_pair, vpc_name)
+            logger.debug("Processing %s children for vpcPair=%s, vPC_name=%s", parent_name, vpc_pair, vpc_name)
 
             # Process each child endpoint
             for child_endpoint in children_endpoints:
@@ -1516,22 +1536,22 @@ class CiscoClientNDFC(CiscoClientController):
                     response.raise_for_status()
                     child_data = response.json()
 
-                    # Save child data directly to the TrunkPort-Channel entry using the child endpoint name as key
-                    trunk_pc_data[child_name] = child_data
+                    # Save child data directly to the Port-Channel entry using the child endpoint name as key
+                    port_channel_data[child_name] = child_data
 
                     processed_count += 1
-                    logger.debug("Successfully processed and saved child endpoint %s to TrunkPort-Channel entry for %s", child_name, vpc_name)
+                    logger.debug("Successfully processed and saved child endpoint %s to %s entry for %s", child_name, parent_name, vpc_name)
 
                 except Exception as e:
                     logger.error("Error processing child endpoint %s for %s: %s", child_name, vpc_name, str(e))
                     # Set empty data on error to maintain consistent structure
-                    trunk_pc_data[child_name] = {}
+                    port_channel_data[child_name] = {}
 
-        logger.info("Completed processing TrunkPort-Channel children. Processed %d items", processed_count)
+        logger.info("Completed processing %s children. Processed %d items", parent_name, processed_count)
 
     def _process_nested_children_for_interfaces(self, parent_endpoint, interface_data, host_name):
         """
-        Process nested children endpoints for interface data (like TrunkPort-Channel -> vPCInterfaceSetting).
+        Process nested children endpoints for interface data (like Port-Channel interfaces -> vPCInterfaceSetting).
         
         Parameters:
             parent_endpoint (dict): The parent endpoint configuration with children
@@ -1552,12 +1572,12 @@ class CiscoClientNDFC(CiscoClientController):
             if not isinstance(interface_entry, dict):
                 continue
                 
-            # For TrunkPort-Channel, look for vpcEntityId
-            if parent_name == "TrunkPort-Channel":
+            # For Port-Channel interfaces (TrunkPort-Channel, AccessPort-Channel, etc.), look for vpcEntityId
+            if parent_name in self.PORT_CHANNEL_INTERFACE_TYPES:
                 vpc_entity_id = interface_entry.get("vpcEntityId")
                 
                 if not vpc_entity_id:
-                    logger.debug("No vpcEntityId found in TrunkPort-Channel interface, skipping nested children")
+                    logger.debug("No vpcEntityId found in %s interface, skipping nested children", parent_name)
                     continue
                 
                 # Parse the vpcEntityId to extract vpcPair and vPC_name
