@@ -80,13 +80,7 @@ filters:
   exclude_templates:
     - "Default_VRF_Universal"
     - "Default_Network_Universal"
-    - "NA" #??? to be tsted
+    - "NA" #This template is used for networks attachments, but should not be included in the policies output
     - "Default_VRF_Extension_Universal"
     - "Default_Network_Extension_Universal"
 
-# Collection settings
-# settings:
-#   max_retries: 3
-#   retry_delay: 2
-#   timeout: 30
-#   batch_size: 10
