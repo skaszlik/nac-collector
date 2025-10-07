@@ -38,7 +38,9 @@ class CiscoClientNDFC(CiscoClientController):
     # 2. Children endpoints defined in YAML configuration that use {{serialNumber}} and {{ifName}} placeholders
     # 3. The same processing pattern for child endpoints like LoopbackInterfaceSetting
     SERIAL_INTERFACE_TYPES = [
-        "LoopbackInterfaces"
+        "LoopbackInterfaces",
+        "AccessEthernetPorts",
+        "TrunkEthernetPorts"
         # Add new serial-based interface types here as needed
     ]
 
