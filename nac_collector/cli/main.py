@@ -170,7 +170,7 @@ def main(
         typer.Option(
             "--domain",
             envvar="NAC_DOMAIN",
-            help="Domain for NDFC authentication (default: local)",
+            help="Domain for NDFC authentication",
         ),
     ] = "local",
     fabric_name: Annotated[
