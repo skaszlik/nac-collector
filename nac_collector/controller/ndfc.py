@@ -43,6 +43,12 @@ class CiscoClientNDFC(CiscoClientController):
         "TrunkEthernetPorts"
         # Add new serial-based interface types here as needed
     ]
+    
+    # VPC pair types that use peerOneId pattern
+    VPC_PAIR_TYPES = [
+        "VPC_Pairs"
+        # Add new VPC pair-based types here as needed
+    ]
 
     def __init__(self, **kwargs):
         """
@@ -1098,6 +1104,9 @@ class CiscoClientNDFC(CiscoClientController):
         elif parent_name in self.PORT_CHANNEL_INTERFACE_TYPES:
             # Handle Port-Channel interfaces that use vpcEntityId pattern
             self._process_port_channel_children(parent_endpoint, endpoint_dict)
+        elif parent_name in self.VPC_PAIR_TYPES:
+            # Handle VPC pair endpoints that use peerOneId pattern
+            self._process_vpc_pairs_children(parent_endpoint, endpoint_dict)
         
         else:
             # Generic children processing for other endpoints (if needed in the future)
@@ -1559,6 +1568,85 @@ class CiscoClientNDFC(CiscoClientController):
                     logger.error("Error processing child endpoint %s for %s: %s", child_name, vpc_name, str(e))
                     # Set empty data on error to maintain consistent structure
                     port_channel_data[child_name] = {}
+
+        logger.info("Completed processing %s children. Processed %d items", parent_name, processed_count)
+
+    def _process_vpc_pairs_children(self, parent_endpoint, endpoint_dict):
+        """
+        Process children endpoints for VPC pair types (VPC_Pairs).
+        Fetches child endpoint data (like VPC_PeerLinkSettings) for each VPC pair.
+        
+        This method handles all VPC pair types that:
+        1. Have a 'peerOneId' field
+        2. Are defined in the VPC_PAIR_TYPES class constant
+        
+        To add support for new VPC pair types:
+        1. Add the new type to the VPC_PAIR_TYPES list
+        2. Ensure the child endpoint uses {{peerOneId}} placeholder in the YAML
+        
+        Parameters:
+            parent_endpoint (dict): The parent VPC pair endpoint.
+            endpoint_dict (dict): The dictionary containing the processed data.
+        """
+        parent_name = parent_endpoint["name"]
+        
+        # Get the children endpoint configurations
+        children_endpoints = parent_endpoint.get("children", [])
+        
+        if not children_endpoints:
+            logger.debug("No children endpoints defined for %s", parent_name)
+            return
+
+        logger.info("Processing %d children endpoints for %s", len(children_endpoints), parent_name)
+        
+        # Get VPC pairs data from the endpoint_dict
+        vpc_pairs = endpoint_dict.get(parent_name, [])
+        
+        if not vpc_pairs:
+            logger.warning("No %s data found to process children for", parent_name)
+            return
+
+        # Process each VPC pair
+        processed_count = 0
+        for vpc_pair_data in vpc_pairs:
+            # Extract peerOneId which identifies the VPC pair
+            peer_one_id = vpc_pair_data.get("peerOneId")
+            
+            if not peer_one_id:
+                logger.debug("No peerOneId found in %s data, skipping", parent_name)
+                continue
+
+            logger.debug("Processing %s children for peerOneId=%s", parent_name, peer_one_id)
+
+            # Process each child endpoint
+            for child_endpoint in children_endpoints:
+                child_name = child_endpoint["name"]
+                child_url = child_endpoint["endpoint"]
+
+                # Replace peerOneId variable in the child endpoint URL
+                child_url = child_url.replace("{{peerOneId}}", str(peer_one_id))
+
+                # Replace fabric ID if present
+                if self.fabric_id and "{{fabricID}}" in child_url:
+                    child_url = child_url.replace("{{fabricID}}", str(self.fabric_id))
+
+                logger.debug("Fetching child endpoint: %s -> %s", child_name, child_url)
+
+                try:
+                    response = self.client.get(f"{self.base_url}{child_url}")
+                    response.raise_for_status()
+                    child_data = response.json()
+
+                    # Save child data directly to the VPC pair entry using the child endpoint name as key
+                    vpc_pair_data[child_name] = child_data
+
+                    processed_count += 1
+                    logger.debug("Successfully processed and saved child endpoint %s to %s entry for peerOneId=%s", child_name, parent_name, peer_one_id)
+
+                except Exception as e:
+                    logger.error("Error processing child endpoint %s for peerOneId=%s: %s", child_name, peer_one_id, str(e))
+                    # Set empty data on error to maintain consistent structure
+                    vpc_pair_data[child_name] = {}
 
         logger.info("Completed processing %s children. Processed %d items", parent_name, processed_count)
 

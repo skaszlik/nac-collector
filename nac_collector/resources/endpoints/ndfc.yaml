@@ -48,17 +48,15 @@ endpoints:
   # "vtep_vip" -> this field can not be mapped (no API endpoint available)
 
   # GET VPC CONFIGURATION.
-  # 1. Get all VPC pairs (all fabrics) then filter by discovered switch serial numbers (if peerOneId is in discovered switches, include the VPC pair)
   - name: VPC_Pairs
     endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/vpcpair?navId={{fabricID}}
     children:
-      # 2. For each VPC pair, get the combined serial number of vPC Pair
-      - name: VPC_Combined_Serial_Number
-        endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/interface/vpcpair_serial_number?serial_number={{peerOneId}}
+      - name: VPC_PeerLinkSettings
+        endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/vpcpair/recommendation?serialNumber={{peerOneId}}
 
-      # 3. For each VPC pair, get policies bound to the VPC pair filtering by the combined serial number
-      - name: VPC_Combined_Serial_Number
-        endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/interface
+      # # 3. For each VPC pair, get policies bound to the VPC pair filtering by the combined serial number
+      # - name: VPC_Combined_Serial_Number
+      #   endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/interface
 
 
   # Get all policies in the fabric (will be filtered by discovered switch serial numbers)
