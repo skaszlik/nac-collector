@@ -1600,15 +1600,30 @@ class CiscoClientNDFC(CiscoClientController):
         logger.info("Processing %d children endpoints for %s", len(children_endpoints), parent_name)
         
         # Get VPC pairs data from the endpoint_dict
-        vpc_pairs = endpoint_dict.get(parent_name, [])
+        vpc_pairs_entries = endpoint_dict.get(parent_name, [])
         
-        if not vpc_pairs:
+        if not vpc_pairs_entries:
             logger.warning("No %s data found to process children for", parent_name)
+            return
+
+        # Extract VPC pairs from the nested data structure
+        # VPC_Pairs structure: [{"data": [vpc_pair_objects], "endpoint": "...", "fabric": "..."}]
+        all_vpc_pairs = []
+        for entry in vpc_pairs_entries:
+            if isinstance(entry, dict) and "data" in entry:
+                vpc_data = entry["data"]
+                if isinstance(vpc_data, list):
+                    all_vpc_pairs.extend(vpc_data)
+                elif vpc_data:  # single object
+                    all_vpc_pairs.append(vpc_data)
+
+        if not all_vpc_pairs:
+            logger.warning("No VPC pair data found in %s entries", parent_name)
             return
 
         # Process each VPC pair
         processed_count = 0
-        for vpc_pair_data in vpc_pairs:
+        for vpc_pair_data in all_vpc_pairs:
             # Extract peerOneId which identifies the VPC pair
             peer_one_id = vpc_pair_data.get("peerOneId")
             
