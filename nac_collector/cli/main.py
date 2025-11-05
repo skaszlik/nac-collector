@@ -125,6 +125,14 @@ def main(
             help="Password for authentication",
         ),
     ] = None,
+    domain: Annotated[
+        str | None,
+        typer.Option(
+            "--domain",
+            envvar="NAC_DOMAIN",
+            help="Domain for authentication (defaults to 'DefaultAuth' for NDO, empty for others)",
+        ),
+    ] = None,
     url: Annotated[
         str | None,
         typer.Option(
@@ -330,6 +338,15 @@ def main(
                 client = cisco_client_class(
                     username=username,
                     password=password,
+        if cisco_client_class:
+            client: CiscoClientController
+            if solution == Solution.NDO:
+                # For NDO, handle domain parameter directly (default to "DefaultAuth" if not provided)
+                effective_domain = domain if domain is not None else "DefaultAuth"
+                client = CiscoClientNDO(
+                    username=username,
+                    password=password,
+                    domain=effective_domain,
                     base_url=url,
                     max_retries=MAX_RETRIES,
                     retry_after=RETRY_AFTER,

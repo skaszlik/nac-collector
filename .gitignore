@@ -81,3 +81,4 @@ logs/
 *.json
 *.zip
 .DS_Store
+nac-collector.zip
