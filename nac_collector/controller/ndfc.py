@@ -1072,8 +1072,20 @@ class CiscoClientNDFC(CiscoClientController):
                         parsed_json = json.loads(value)
                         data[key] = parsed_json
                         logger.debug("Fixed escaped JSON in %s field", key)
+                        self._fix_escaped_json_in_data(parsed_json)
                     except json.JSONDecodeError as e:
                         logger.warning("Could not parse %s field as JSON: %s", key, str(e))
+                elif key == 'dhcpServers' and isinstance(value, str):
+                    stripped_value = value.strip()
+                    if stripped_value and stripped_value[0] in '{[':
+                        try:
+                            # Decode escaped DHCP servers payloads within network template config
+                            parsed_json = json.loads(stripped_value)
+                            data[key] = parsed_json
+                            logger.debug("Fixed escaped JSON in dhcpServers field")
+                            self._fix_escaped_json_in_data(parsed_json)
+                        except json.JSONDecodeError as e:
+                            logger.warning("Could not parse dhcpServers field as JSON: %s", str(e))
                 else:
                     # Recursively process nested structures
                     self._fix_escaped_json_in_data(value)
