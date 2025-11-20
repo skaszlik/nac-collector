@@ -77,11 +77,4 @@ tmp/
 logs/
 *.json
 *.zip
-<<<<<<< HEAD
-
 .DS_Store
-
-nac-collector.zip
-=======
-.DS_Store
->>>>>>> 1ec0bff (Proces children)
