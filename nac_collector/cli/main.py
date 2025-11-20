@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 from enum import Enum
 from typing import Annotated
@@ -174,14 +175,6 @@ def main(
             help="Path to devices inventory YAML file (for device-based solutions)",
         ),
     ] = None,
-    fabric_name: Annotated[
-        str | None,
-        typer.Option(
-            "--fabric-name",
-            envvar="NAC_FABRIC_NAME",
-            help="Fabric name for NDFC data collection",
-        ),
-    ] = None,
     version: Annotated[
         bool | None,
         typer.Option(
@@ -207,6 +200,7 @@ def main(
         raise typer.Exit(1)
 
     output_file = output or "nac-collector.zip"
+    fabric_name = os.getenv("NDFC_FABRIC_NAME")
 
     # Handle device-based solutions
     if solution in DEVICE_BASED_SOLUTIONS:
@@ -323,7 +317,10 @@ def main(
         # Validate NDFC-specific requirements
         if solution == Solution.NDFC and not fabric_name:
             console.print(
-                "[red]--fabric-name is required for NDFC solution[/red]"
+                "[red]NDFC_FABRIC_NAME environment variable is required for NDFC solution[/red]"
+            )
+            console.print(
+                "[yellow]Set NDFC_FABRIC_NAME to the target fabric name before running the collector.[/yellow]"
             )
             raise typer.Exit(1)
 

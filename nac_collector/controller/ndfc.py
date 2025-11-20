@@ -260,8 +260,8 @@ class CiscoClientNDFC(CiscoClientController):
         Logic:
         - Root of MSD tree has "fabricState": "msd"
         - Members have "fabricState": "member" and "fabricParent" != "None"
-        - If --fabric-name is MSD root, process endpoints for MSD (root + all members)
-        - If --fabric-name is NOT MSD root, treat as standalone fabric
+        - If NDFC_FABRIC_NAME points to the MSD root, process endpoints for MSD (root + all members)
+        - If NDFC_FABRIC_NAME points to a non-root fabric, treat it as a standalone fabric
         
         Args:
             endpoints_data: List of endpoint configurations from YAML
