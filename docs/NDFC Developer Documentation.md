@@ -54,7 +54,7 @@ collect_data() [PUBLIC ENTRY POINT]
 **Called by**: External instantiation
 **Calls**: `super().__init__(**kwargs)`
 **Key attributes initialized**:
-- `fabric_name`: Target fabric name
+- `fabric_name`: Target fabric name (sourced from `NDFC_FABRIC_NAME` env var)
 - `is_msd_fabric`: Boolean flag for MSD detection
 - `msd_topology`: Dictionary storing MSD fabric relationships
 - `fabric_id`: Fabric ID for API endpoint variable replacement
@@ -94,7 +94,7 @@ collect_data() [PUBLIC ENTRY POINT]
 **Logic**: 
 - Looks for MSD_Fabric_Associations endpoint
 - Builds MSD topology tree (root + members)
-- Sets `is_msd_fabric = True` if fabric_name is MSD root
+- Sets `is_msd_fabric = True` if the fabric referenced by `NDFC_FABRIC_NAME` is the MSD root
 
 #### `_extract_fabric_id_from_endpoints(self, endpoints_data: List[Dict[str, Any]], result: Dict[str, Any])`
 **Purpose**: Extract fabric ID from Fabric_Configuration for endpoint variable replacement
