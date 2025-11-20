@@ -77,14 +77,3 @@ endpoints:
     children:
       - name: Network_Attachments
         endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/top-down/fabrics/%v/networks/{{network_name}}/attachments
-
-
-# Optional: Filter configuration
-filters:
-  exclude_templates:
-    - "Default_VRF_Universal"
-    - "Default_Network_Universal"
-    - "NA" #This template is used for networks attachments, but should not be included in the policies output
-    - "Default_VRF_Extension_Universal"
-    - "Default_Network_Extension_Universal"
-

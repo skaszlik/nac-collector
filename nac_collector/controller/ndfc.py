@@ -50,6 +50,15 @@ class CiscoClientNDFC(CiscoClientController):
         # Add new VPC pair-based types here as needed
     ]
 
+    # Templates to exclude from policies filtering
+    EXCLUDE_TEMPLATES = [
+        "Default_VRF_Universal",
+        "Default_Network_Universal",
+        "NA",  # This template is used for networks attachments, but should not be included in the policies output
+        "Default_VRF_Extension_Universal",
+        "Default_Network_Extension_Universal"
+    ]
+
     def __init__(self, **kwargs):
         """
         Initialize NDFC Controller client.
@@ -69,8 +78,7 @@ class CiscoClientNDFC(CiscoClientController):
         self.msd_topology = {}
         self.discovered_switches = {}
         self.fabric_id = None  # Store fabric ID for endpoint variable replacement
-        self.exclude_templates = []  # Store template names to exclude from filters
-        self._endpoints_file_path = None  # Store the path to the endpoints file for loading filters
+        self.exclude_templates = self.EXCLUDE_TEMPLATES  # Template names to exclude from policies filtering
         
         logger.info("Initialized NDFC Controller for fabric: %s", self.fabric_name)
 
@@ -190,10 +198,6 @@ class CiscoClientNDFC(CiscoClientController):
         # Handle the case where endpoints_data might be a dict with 'endpoints' key
         if isinstance(endpoints_data, dict) and 'endpoints' in endpoints_data:
             endpoints_list = endpoints_data['endpoints']
-            # Also extract filters if available
-            filters_config = endpoints_data.get('filters', {})
-            self.exclude_templates = filters_config.get('exclude_templates', [])
-            logger.info("Loaded exclude templates from endpoints data: %s", self.exclude_templates)
         elif isinstance(endpoints_data, list):
             endpoints_list = endpoints_data
         else:
@@ -1918,23 +1922,17 @@ class CiscoClientNDFC(CiscoClientController):
 
     def load_endpoints_from_file(self, endpoints_file: str) -> List[Dict[str, Any]]:
         """
-        Load endpoints and filters configuration from YAML file.
-        
+        Load endpoints configuration from YAML file.
+
         Args:
             endpoints_file: Path to YAML file
-            
+
         Returns:
             List[Dict[str, Any]]: List of endpoint configurations
         """
         try:
             with open(endpoints_file, 'r', encoding='utf-8') as f:
                 yaml_data = self.yaml.load(f)
-                
-                # Load filters configuration
-                filters_config = yaml_data.get('filters', {})
-                self.exclude_templates = filters_config.get('exclude_templates', [])
-                logger.info("Loaded exclude templates: %s", self.exclude_templates)
-                
                 return yaml_data.get('endpoints', [])
         except FileNotFoundError:
             logger.error("Endpoints file not found: %s", endpoints_file)
