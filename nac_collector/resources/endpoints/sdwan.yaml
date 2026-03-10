@@ -269,6 +269,8 @@
   children:
   - name: application_priority_traffic_policy
     endpoint: /traffic-policy
+  - name: application_priority_policy_settings
+    endpoint: /policy-settings
   - name: application_priority_qos
     endpoint: /qos-policy
 - name: other_feature_profile
