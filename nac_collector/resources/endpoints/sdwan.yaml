@@ -280,6 +280,11 @@
     endpoint: /thousandeyes
   - name: other_ucse
     endpoint: /ucse
+- name: embedded_security_feature_profile
+  endpoint: /v1/feature-profile/sdwan/embedded-security
+  children:
+  - name: embedded_security_ngfw
+    endpoint: /unified/ngfirewall
 - name: dns_security_feature_profile
   endpoint: /v1/feature-profile/sdwan/dns-security
   children:
@@ -374,8 +379,6 @@
   endpoint: /template/policy/definition/rewriterule/
 - name: ipv6_device_acl_policy_definition
   endpoint: /template/policy/definition/deviceaccesspolicyv6/
-- name: embedded_security_feature_profile
-  endpoint: /v1/feature-profile/sdwan/embedded-security
 - name: application_aware_routing_policy_definition
   endpoint: /template/policy/definition/approute/
 - name: sig_security_feature_profile
