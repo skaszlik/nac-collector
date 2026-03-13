@@ -285,6 +285,8 @@
   children:
   - name: embedded_security_ngfw
     endpoint: /unified/ngfirewall
+  - name: embedded_security
+    endpoint: /policy
 - name: dns_security_feature_profile
   endpoint: /v1/feature-profile/sdwan/dns-security
   children:
