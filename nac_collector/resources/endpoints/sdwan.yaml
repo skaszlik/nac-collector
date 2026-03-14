@@ -45,6 +45,8 @@
     endpoint: /security-localapp
   - name: policy_object_tloc_list
     endpoint: /tloc
+  - name: policy_object_security_zone
+    endpoint: /security-zone
   - name: policy_object_data_ipv4_prefix_list
     endpoint: /data-prefix
   - name: policy_object_sla_class_list
