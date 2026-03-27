@@ -1,30 +1,26 @@
-- name: endpoint
-  endpoint: /ers/config/endpoint
-- name: endpoint_custom_attribute
-  endpoint: /api/v1/endpoint-custom-attribute
-- name: network_access_policy_set_update_ranks
-  endpoint: /api/v1/policy/network-access/policy-set
+- name: device_admin_policy_set_update_ranks
+  endpoint: /api/v1/policy/device-admin/policy-set
   children:
   - &id001
-    name: network_access_authorization_exception_rule
-    endpoint: /exception
+    name: device_admin_authentication_rule
+    endpoint: /authentication
   - &id002
-    name: network_access_authorization_exception_rule_update_ranks
-    endpoint: /exception
+    name: device_admin_authentication_rule_update_ranks
+    endpoint: /authentication
   - &id003
-    name: network_access_authentication_rule_update_ranks
-    endpoint: /authentication
+    name: device_admin_authorization_rule
+    endpoint: /authorization
   - &id004
-    name: network_access_authentication_rule
-    endpoint: /authentication
+    name: device_admin_authorization_rule_update_ranks
+    endpoint: /authorization
   - &id005
-    name: network_access_authorization_rule
-    endpoint: /authorization
+    name: device_admin_authorization_exception_rule_update_ranks
+    endpoint: /exception
   - &id006
-    name: network_access_authorization_rule_update_ranks
-    endpoint: /authorization
-- name: network_access_policy_set
-  endpoint: /api/v1/policy/network-access/policy-set
+    name: device_admin_authorization_exception_rule
+    endpoint: /exception
+- name: device_admin_policy_set
+  endpoint: /api/v1/policy/device-admin/policy-set
   children:
   - *id001
   - *id002
@@ -32,31 +28,29 @@
   - *id004
   - *id005
   - *id006
-- name: network_access_condition
-  endpoint: /api/v1/policy/network-access/condition
-- name: device_admin_policy_set_update_ranks
-  endpoint: /api/v1/policy/device-admin/policy-set
+- name: network_access_policy_set
+  endpoint: /api/v1/policy/network-access/policy-set
   children:
   - &id007
-    name: device_admin_authorization_rule_update_ranks
-    endpoint: /authorization
+    name: network_access_authentication_rule_update_ranks
+    endpoint: /authentication
   - &id008
-    name: device_admin_authorization_rule
-    endpoint: /authorization
+    name: network_access_authentication_rule
+    endpoint: /authentication
   - &id009
-    name: device_admin_authorization_exception_rule_update_ranks
+    name: network_access_authorization_exception_rule
     endpoint: /exception
   - &id010
-    name: device_admin_authorization_exception_rule
+    name: network_access_authorization_exception_rule_update_ranks
     endpoint: /exception
   - &id011
-    name: device_admin_authentication_rule_update_ranks
-    endpoint: /authentication
+    name: network_access_authorization_rule
+    endpoint: /authorization
   - &id012
-    name: device_admin_authentication_rule
-    endpoint: /authentication
-- name: device_admin_policy_set
-  endpoint: /api/v1/policy/device-admin/policy-set
+    name: network_access_authorization_rule_update_ranks
+    endpoint: /authorization
+- name: network_access_policy_set_update_ranks
+  endpoint: /api/v1/policy/network-access/policy-set
   children:
   - *id007
   - *id008
@@ -64,69 +58,75 @@
   - *id010
   - *id011
   - *id012
-- name: certificate_authentication_profile
-  endpoint: /ers/config/certificateprofile
-- name: trustsec_egress_matrix_cell_default
-  endpoint: /ers/config/egressmatrixcell
-- name: trustsec_egress_matrix_cell
-  endpoint: /ers/config/egressmatrixcell
-- name: network_access_dictionary
-  endpoint: /api/v1/policy/network-access/dictionaries
-- name: trustsec_ip_to_sgt_mapping
-  endpoint: /ers/config/sgmapping
-- name: trustsec_security_group
-  endpoint: /ers/config/sgt
-- name: repository
-  endpoint: /api/v1/repository
-- name: allowed_protocols
-  endpoint: /ers/config/allowedprotocols
-- name: allowed_protocols_tacacs
-  endpoint: /ers/config/allowedprotocols
-- name: authorization_profile
-  endpoint: /ers/config/authorizationprofile
-- name: network_access_time_and_date_condition
-  endpoint: /api/v1/policy/network-access/time-condition
-- name: device_admin_time_and_date_condition
-  endpoint: /api/v1/policy/device-admin/time-condition
-- name: sxp_domain_filter
-  endpoint: /ers/config/filterpolicy
-- name: device_admin_condition
-  endpoint: /api/v1/policy/device-admin/condition
-- name: trustsec_work_process_settings
-  endpoint: /api/v1/trustsec/matrix-workflow-settings
-- name: trustsec_security_group_acl
-  endpoint: /ers/config/sgacl
-- name: downloadable_acl
-  endpoint: /ers/config/downloadableacl
-- name: endpoint_identity_group
-  endpoint: /ers/config/endpointgroup
-- name: trustsec_matrix
-  endpoint: /api/v1/trustsec/matrix
-- name: network_device_group
-  endpoint: /ers/config/networkdevicegroup
-- name: identity_source_sequence
-  endpoint: /ers/config/idstoresequence
-- name: license_tier_state
-  endpoint: /api/v1/license/system/tier-state
-- name: device_admin_authorization_global_exception_rule
-  endpoint: /api/v1/policy/device-admin/policy-set/global-exception
-- name: device_admin_authorization_global_exception_rule_update_ranks
-  endpoint: /api/v1/policy/device-admin/policy-set/global-exception
-- name: tacacs_command_set
-  endpoint: /ers/config/tacacscommandsets
-- name: internal_user
-  endpoint: /ers/config/internaluser
+- name: network_device
+  endpoint: /ers/config/networkdevice
 - name: network_access_authorization_global_exception_rule_update_ranks
   endpoint: /api/v1/policy/network-access/policy-set/global-exception
 - name: network_access_authorization_global_exception_rule
   endpoint: /api/v1/policy/network-access/policy-set/global-exception
-- name: tacacs_profile
-  endpoint: /ers/config/tacacsprofile
+- name: allowed_protocols_tacacs
+  endpoint: /ers/config/allowedprotocols
+- name: allowed_protocols
+  endpoint: /ers/config/allowedprotocols
+- name: device_admin_time_and_date_condition
+  endpoint: /api/v1/policy/device-admin/time-condition
+- name: network_access_dictionary
+  endpoint: /api/v1/policy/network-access/dictionaries
+- name: trustsec_work_process_settings
+  endpoint: /api/v1/trustsec/matrix-workflow-settings
+- name: endpoint
+  endpoint: /ers/config/endpoint
+- name: repository
+  endpoint: /api/v1/repository
+- name: network_device_group
+  endpoint: /ers/config/networkdevicegroup
 - name: trustsec_ip_to_sgt_mapping_group
   endpoint: /ers/config/sgmappinggroup
+- name: trustsec_egress_matrix_cell
+  endpoint: /ers/config/egressmatrixcell
+- name: trustsec_egress_matrix_cell_default
+  endpoint: /ers/config/egressmatrixcell
+- name: device_admin_authorization_global_exception_rule_update_ranks
+  endpoint: /api/v1/policy/device-admin/policy-set/global-exception
+- name: device_admin_authorization_global_exception_rule
+  endpoint: /api/v1/policy/device-admin/policy-set/global-exception
+- name: identity_source_sequence
+  endpoint: /ers/config/idstoresequence
+- name: endpoint_custom_attribute
+  endpoint: /api/v1/endpoint-custom-attribute
+- name: authorization_profile
+  endpoint: /ers/config/authorizationprofile
+- name: internal_user
+  endpoint: /ers/config/internaluser
+- name: device_admin_condition
+  endpoint: /api/v1/policy/device-admin/condition
+- name: downloadable_acl
+  endpoint: /ers/config/downloadableacl
 - name: active_directory_join_point
   endpoint: /ers/config/activedirectory
+- name: license_tier_state
+  endpoint: /api/v1/license/system/tier-state
+- name: network_access_condition
+  endpoint: /api/v1/policy/network-access/condition
+- name: trustsec_security_group
+  endpoint: /ers/config/sgt
+- name: trustsec_ip_to_sgt_mapping
+  endpoint: /ers/config/sgmapping
+- name: tacacs_profile
+  endpoint: /ers/config/tacacsprofile
+- name: endpoint_identity_group
+  endpoint: /ers/config/endpointgroup
 - name: user_identity_group
   endpoint: /ers/config/identitygroup
-- name: network_device
-  endpoint: /ers/config/networkdevice
+- name: certificate_authentication_profile
+  endpoint: /ers/config/certificateprofile
+- name: trustsec_matrix
+  endpoint: /api/v1/trustsec/matrix
+- name: network_access_time_and_date_condition
+  endpoint: /api/v1/policy/network-access/time-condition
+- name: trustsec_security_group_acl
+  endpoint: /ers/config/sgacl
+- name: tacacs_command_set
+  endpoint: /ers/config/tacacscommandsets
+- name: sxp_domain_filter
+  endpoint: /ers/config/filterpolicy
