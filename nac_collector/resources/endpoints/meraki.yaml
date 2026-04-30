@@ -2,6 +2,8 @@
   has_own_id: true
   endpoint: /organizations
   children:
+  - name: organization_integrations_xdr_networks
+    endpoint: /integrations/xdr/networks/enable
   - name: appliance_vpn_site_to_site_ipsec_peers_slas
     endpoint: /appliance/vpn/siteToSite/ipsec/peers/slas
   - name: wireless_mqtt_settings
