@@ -215,6 +215,8 @@
       endpoint: /sm/targetGroups
     - name: appliance_security_malware
       endpoint: /appliance/security/malware
+    - name: network_vlan_profile_assignment
+      endpoint: /vlanProfiles/assignments/reassign
     - name: switch_routing_multicast_rendezvous_point
       has_own_id: true
       id_name: rendezvousPointId
