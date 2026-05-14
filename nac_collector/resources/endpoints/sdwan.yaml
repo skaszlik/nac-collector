@@ -213,6 +213,8 @@
   endpoint: /template/policy/definition/qosmap/
 - name: expanded_community_list_policy_object
   endpoint: /template/policy/list/expandedcommunity/
+- name: cloud_provider_settings
+  endpoint: /settings/configuration/cloudProviderSetting
 - name: custom_control_topology_policy_definition
   endpoint: /template/policy/definition/control/
 - name: url_filtering_definition
