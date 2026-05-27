@@ -141,6 +141,14 @@ def main(
             help="Base URL for the service",
         ),
     ] = None,
+    api_token: Annotated[
+        str | None,
+        typer.Option(
+            "--api-token",
+            envvar="NAC_API_TOKEN",
+            help="API token for authentication (supported for SDWAN 20.18+). If set, username/password are not required.",
+        ),
+    ] = None,
     verbosity: Annotated[
         LogLevel,
         typer.Option("-v", "--verbosity", help="Log level"),
@@ -296,15 +304,19 @@ def main(
         elif solution == Solution.MERAKI:
             cisco_client_class = CiscoClientMERAKI
 
-        # Validate required credentials for controller-based solutions
-        if not username:
+        # Validate that api_token is only used with SDWAN
+        if api_token and solution != Solution.SDWAN:
             console.print(
-                "[red]Username is required for controller-based solutions[/red]"
+                "[red]--api-token is only supported for SDWAN solution (20.18+)[/red]"
             )
             raise typer.Exit(1)
-        if not password:
+
+        # Validate required credentials for controller-based solutions
+        # Either api_token (SDWAN only) OR (username AND password) must be provided
+        if not api_token and not (username and password):
             console.print(
-                "[red]Password is required for controller-based solutions[/red]"
+                "[red]Either --api-token (NAC_API_TOKEN) [SDWAN 20.18+ only] or both --username (NAC_USERNAME) "
+                "and --password (NAC_PASSWORD) must be provided[/red]"
             )
             raise typer.Exit(1)
         if not url:
@@ -317,8 +329,8 @@ def main(
                 # For NDO, handle domain parameter directly (default to "DefaultAuth" if not provided)
                 effective_domain = domain if domain is not None else "DefaultAuth"
                 client = CiscoClientNDO(
-                    username=username,
-                    password=password,
+                    username=username or "",
+                    password=password or "",
                     domain=effective_domain,
                     base_url=url,
                     max_retries=MAX_RETRIES,
@@ -331,7 +343,7 @@ def main(
                 # Username is not used for CDFMC authentication
                 client = CiscoClientFMC(
                     username="ignored_for_cdfmc",
-                    password=password,
+                    password=password or "",
                     base_url=url,
                     max_retries=MAX_RETRIES,
                     retry_after=RETRY_AFTER,
@@ -339,11 +351,23 @@ def main(
                     ssl_verify=False,
                     cdfmc=True,
                 )
+            elif solution == Solution.SDWAN:
+                # SDWAN supports api_token authentication (20.18+)
+                client = CiscoClientSDWAN(
+                    username=username or "",
+                    password=password or "",
+                    base_url=url,
+                    max_retries=MAX_RETRIES,
+                    retry_after=RETRY_AFTER,
+                    timeout=timeout,
+                    ssl_verify=False,
+                    api_token=api_token or "",
+                )
             else:
-                # For other solutions, don't pass domain parameter
+                # For other solutions, no api_token support
                 client = cisco_client_class(
-                    username=username,
-                    password=password,
+                    username=username or "",
+                    password=password or "",
                     base_url=url,
                     max_retries=MAX_RETRIES,
                     retry_after=RETRY_AFTER,
