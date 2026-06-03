@@ -39,6 +39,9 @@ Options:
                         [env var: NAC_PASSWORD]
   * --url TEXT          Base URL for the service (required for controller-based solutions)
                         [env var: NAC_URL]
+  --api-token TEXT      API token for authentication (SDWAN 20.18+ only).
+                        If set, --username/--password are not required.
+                        [env var: NAC_API_TOKEN]
   -v, --verbosity [CRITICAL|ERROR|WARNING|INFO|DEBUG]
                         Log level [default: WARNING]
   -f, --fetch-latest    Fetch the latest endpoint definitions from
@@ -61,6 +64,13 @@ export NAC_PASSWORD=Cisco123
 export NAC_URL=https://10.1.1.1
 ```
 
+For SDWAN 20.18+ API token authentication:
+
+```shell
+export NAC_API_TOKEN=<your-jwt-token>
+export NAC_URL=https://10.1.1.1
+```
+
 ## Examples
 
 ### SDWAN
@@ -74,6 +84,20 @@ uv run nac-collector -s SDWAN -v DEBUG --fetch-latest
 # Without environment variables
 uv run nac-collector -s SDWAN --username USERNAME --password PASSWORD --url URL -v DEBUG --fetch-latest
 ```
+
+Using API token (Manager 20.18+):
+
+```sh
+# With environment variable
+export NAC_API_TOKEN=<your-jwt-token>
+nac-collector -s SDWAN --url URL -v DEBUG --fetch-latest
+
+# With CLI flag
+nac-collector -s SDWAN --api-token <your-jwt-token> --url URL -v DEBUG --fetch-latest
+```
+
+> **Note:** `--api-token` is only supported with the SDWAN solution and requires Manager version 20.18+.
+> When `--api-token` is provided, it takes precedence over `--username`/`--password` (which become optional).
 
 Using installed package:
 
@@ -95,25 +119,35 @@ nac-collector -s ISE --username USERNAME --password PASSWORD --url URL -v DEBUG 
 
 ```sh
 # With environment variables
-nac-collector -s CATALYSTCENTER -v DEBUG --fetch-latest
+nac-collector -s CATALYSTCENTER -v DEBUG
 
 # Without environment variables
-nac-collector -s CATALYSTCENTER --username USERNAME --password PASSWORD --url URL -v DEBUG --fetch-latest
+nac-collector -s CATALYSTCENTER --username USERNAME --password PASSWORD --url URL -v DEBUG
+
+Catalyst center should NOT use "--fetch-latest"
 ```
 
 Catalyst Center contains some custom logic, explained in [README_catalyst_center.md](README_catalyst_center.md).
 
-### FMC
+### FMC / CDFMC
 
 ```sh
-# With environment variables
+# FMC With environment variables
 nac-collector -s FMC -v DEBUG -e nac_collector/resources/endpoints/fmc.yaml
 
-# Without environment variables
+# FMC Without environment variables
 nac-collector -s FMC --username USERNAME --password PASSWORD --url URL -v DEBUG -e nac_collector/resources/endpoints/fmc.yaml
-```
 
-It is recommended to use the pre-populated endpoints list (via the `-e` option) instead of the auto-generated list (using `--fetch-latest`)
+# cdFMC With environment variables
+nac-collector -s CDFMC -v DEBUG -e nac_collector/resources/endpoints/fmc.yaml
+
+# cdFMC Without environment variables
+nac-collector -s CDFMC --username none --password API_TOKEN --url URL -v DEBUG -e nac_collector/resources/endpoints/fmc.yaml
+```
+Notes:
+- cdFMC requires username to be set, even though it's going to be ignored
+- It is recommended to use the pre-populated endpoints list (via the `-e` option) instead of the auto-generated list (using `--fetch-latest`)
+
 ### NDO
 
 ```sh

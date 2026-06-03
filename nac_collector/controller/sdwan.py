@@ -1,3 +1,5 @@
+import base64
+import binascii
 import json
 import logging
 from typing import Any
@@ -35,14 +37,93 @@ class CiscoClientSDWAN(CiscoClientController):
         retry_after: int,
         timeout: int,
         ssl_verify: bool,
+        api_token: str = "",  # nosec B107 - not a hardcoded password, empty means no token
     ) -> None:
+        self.api_token = api_token
         super().__init__(
             username, password, base_url, max_retries, retry_after, timeout, ssl_verify
         )
 
     def authenticate(self) -> bool:
         """
-        Perform token-based authentication.
+        Perform authentication using either API token or username/password.
+
+        If api_token is set, uses Bearer token authentication (supported in 20.18+).
+        Otherwise, falls back to session-based authentication via /j_security_check.
+
+        Returns:
+            bool: True if authentication is successful, False otherwise.
+        """
+
+        if self.api_token:
+            return self._authenticate_token()
+        return self._authenticate_session()
+
+    def _authenticate_token(self) -> bool:
+        """
+        Perform API token authentication (supported in 20.18+).
+
+        Returns:
+            bool: True if authentication is successful, False otherwise.
+        """
+        logger.info("Authenticating with API token for URL: %s", self.base_url)
+
+        # Extract CSRF token from JWT payload
+        try:
+            payload_b64 = self.api_token.split(".")[1]
+            # Add padding if needed
+            payload_b64 += "=" * (-len(payload_b64) % 4)
+            payload = json.loads(base64.urlsafe_b64decode(payload_b64))
+            csrf_token = payload.get("csrf")
+            if csrf_token:
+                logger.info("Extracted CSRF token from JWT payload")
+            else:
+                logger.error(
+                    "JWT payload does not contain 'csrf' field. "
+                    "Ensure valid token was generated in Manager 20.18+"
+                )
+                return False
+        except (IndexError, ValueError, json.JSONDecodeError, binascii.Error) as e:
+            logger.error(
+                "Could not decode JWT payload to extract CSRF token: %s. "
+                "Ensure valid token was generated in Manager 20.18+",
+                e,
+            )
+            return False
+
+        self.client = httpx.Client(
+            verify=self.ssl_verify,
+            timeout=self.timeout,
+        )
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_token}",
+            "X-XSRF-TOKEN": csrf_token,
+        }
+        self.client.headers.update(headers)
+
+        # Verify token by making a test request
+        test_url = self.base_url + "/dataservice/client/server"
+        try:
+            response = self.client.get(test_url)
+            if response.status_code == 200:
+                logger.info(
+                    "API token authentication successful for URL: %s", self.base_url
+                )
+                self.base_url = self.base_url + "/dataservice"
+                return True
+            logger.error(
+                "API token authentication failed with status code: %s",
+                response.status_code,
+            )
+        except httpx.RequestError as e:
+            logger.error("API token authentication request failed: %s", e)
+
+        return False
+
+    def _authenticate_session(self) -> bool:
+        """
+        Perform session-based authentication via /j_security_check.
 
         Returns:
             bool: True if authentication is successful, False otherwise.
@@ -105,6 +186,9 @@ class CiscoClientSDWAN(CiscoClientController):
         Returns:
             dict: The final dictionary containing the data retrieved from the endpoints.
         """
+        # Merge URL list endpoints for SD-WAN (otherwise we get duplicate entries)
+        endpoints_data = self._merge_url_list_endpoints(endpoints_data)
+
         # Initialize an empty dictionary
         final_dict = {}
 
@@ -424,6 +508,7 @@ class CiscoClientSDWAN(CiscoClientController):
 
         """
         endpoint_dict["configuration_group_devices"] = []
+        endpoint_dict["configuration_group_associated_devices"] = []
         response = self.get_request(self.base_url + endpoint["endpoint"])
         if response is None:
             return endpoint_dict
@@ -451,6 +536,25 @@ class CiscoClientSDWAN(CiscoClientController):
 
                 # If configuration group has devices assigned, extract devices details to configuration_group_devices
                 if data.get("numberOfDevices") > 0:
+                    config_group_asssociated_devices_endpoint = (
+                        config_group_endpoint + "/device/associate"
+                    )
+                    response = self.get_request(
+                        self.base_url + config_group_asssociated_devices_endpoint
+                    )
+                    if response is None:
+                        continue
+                    for device_data in response.json().get("devices", []):
+                        endpoint_dict["configuration_group_associated_devices"].append(
+                            {
+                                "data": device_data,
+                                "endpoint": config_group_asssociated_devices_endpoint,
+                            }
+                        )
+                    self.log_response(
+                        config_group_asssociated_devices_endpoint, response
+                    )
+
                     config_group_devices_endpoint = (
                         config_group_endpoint + "/device/variables"
                     )
@@ -627,6 +731,42 @@ class CiscoClientSDWAN(CiscoClientController):
         if children_entries:
             entry["children"] = children_entries
         return entry
+
+    @staticmethod
+    def _merge_url_list_endpoints(
+        endpoints_data: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """
+        Merge policy_object_security_url_block_list and policy_object_security_url_allow_list
+        into a single policy_object_security_url_list endpoint.
+
+        Args:
+            endpoints_data: List of endpoint definitions
+
+        Returns:
+            Modified list with merged URL list endpoints
+        """
+        for item in endpoints_data:
+            if (
+                item.get("name") == "policy_object_feature_profile"
+                and "children" in item
+            ):
+                url_list_names = {
+                    "policy_object_security_url_block_list",
+                    "policy_object_security_url_allow_list",
+                }
+                item["children"] = [
+                    child
+                    for child in item["children"]
+                    if child.get("name") not in url_list_names
+                ]
+                item["children"].append(
+                    {
+                        "name": "policy_object_security_url_list",
+                        "endpoint": "/security-urllist",
+                    }
+                )
+        return endpoints_data
 
     @staticmethod
     def strip_backslash(endpoint_string: str) -> str:
