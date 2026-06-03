@@ -379,7 +379,7 @@ def main(
                     ssl_verify=False,
                     api_token=api_token or "",
                 )
-             elif solution == Solution.NDFC:
+            elif solution == Solution.NDFC:
                 client = CiscoClientNDFC(
                     username=username,
                     password=password,
