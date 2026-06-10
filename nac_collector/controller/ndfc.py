@@ -292,23 +292,35 @@ class CiscoClientNDFC(CiscoClientController):
             # Build MSD tree structure
             msd_root = None
             member_fabrics = []
-            
+
             if isinstance(msd_data, list):
+                # Step 1: find the target fabric entry and check if it is an MSD root.
+                # Iterating and keeping only the last entry with fabricState=="msd"
+                # breaks when multiple MSD roots exist on the same controller.
+                target_entry = None
                 for association in msd_data:
                     if isinstance(association, dict):
-                        fabric_state = association.get("fabricState")
-                        fabric_name = association.get("fabricName")
-                        fabric_parent = association.get("fabricParent")
-                        
-                        if fabric_state == "msd":
-                            # Found MSD root
-                            msd_root = fabric_name
-                            logger.debug("Found MSD root: %s", msd_root)
-                        elif fabric_state == "member" and fabric_parent and fabric_parent != "None":
-                            # Found MSD member with valid parent
-                            if fabric_name:
-                                member_fabrics.append(fabric_name)
-                                logger.debug("Found MSD member: %s with parent: %s", fabric_name, fabric_parent)
+                        if association.get("fabricName") == self.fabric_name:
+                            target_entry = association
+                            break
+
+                if target_entry and target_entry.get("fabricState") == "msd":
+                    # Step 2: target fabric IS an MSD root — collect only its own members.
+                    msd_root = self.fabric_name
+                    logger.debug("Found MSD root: %s", msd_root)
+                    for association in msd_data:
+                        if isinstance(association, dict):
+                            if (
+                                association.get("fabricState") == "member"
+                                and association.get("fabricParent") == self.fabric_name
+                                and association.get("fabricName")
+                            ):
+                                member_fabrics.append(association["fabricName"])
+                                logger.debug(
+                                    "Found MSD member: %s with parent: %s",
+                                    association["fabricName"],
+                                    self.fabric_name,
+                                )
             
             # Determine if provided fabric-name is MSD root
             if msd_root and self.fabric_name == msd_root:
