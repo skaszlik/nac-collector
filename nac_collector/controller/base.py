@@ -293,7 +293,7 @@ class CiscoClientController(ABC):
                     endpoint,
                     response.status_code,
                 )
-                return data if isinstance(data, (dict, list)) else None
+                return data if isinstance(data, dict | list) else None
             except ValueError:
                 self.logger.error(
                     "Failed to decode JSON from response for endpoint: %s", endpoint
