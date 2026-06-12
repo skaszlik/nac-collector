@@ -6,7 +6,8 @@ with MSD fabric support using only YAML-defined endpoints.
 
 import json
 import logging
-from typing import Any
+from collections.abc import Iterator
+from typing import Any, cast
 
 import httpx
 
@@ -59,7 +60,7 @@ class CiscoClientNDFC(CiscoClientController):
         "Default_Network_Extension_Universal",
     ]
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         """
         Initialize NDFC Controller client.
 
@@ -67,18 +68,24 @@ class CiscoClientNDFC(CiscoClientController):
             **kwargs: Arbitrary keyword arguments passed to parent CiscoClientController
         """
         # Extract NDFC-specific parameters before calling parent
-        self.fabric_name = kwargs.pop("fabric_name", None)
-        self.domain = kwargs.pop("domain", "local")
+        fabric_name = kwargs.pop("fabric_name", None)
+        domain = kwargs.pop("domain", "local")
+        self.fabric_name: str | None = (
+            str(fabric_name) if fabric_name is not None else None
+        )
+        self.domain: str = str(domain)
 
         # Call parent constructor with standard parameters
         super().__init__(**kwargs)
 
         # Initialize NDFC-specific attributes
-        self.is_msd_fabric = False
-        self.msd_topology = {}
-        self.discovered_switches = {}
-        self.fabric_id = None  # Store fabric ID for endpoint variable replacement
-        self.exclude_templates = (
+        self.is_msd_fabric: bool = False
+        self.msd_topology: dict[str, Any] = {}
+        self.discovered_switches: dict[str, Any] = {}
+        self.fabric_id: Any | None = (
+            None  # Store fabric ID for endpoint variable replacement
+        )
+        self.exclude_templates: list[str] = (
             self.EXCLUDE_TEMPLATES
         )  # Template names to exclude from policies filtering
 
@@ -202,14 +209,7 @@ class CiscoClientNDFC(CiscoClientController):
         Returns:
             Dict[str, Any]: Collected data organized by endpoint name
         """
-        # Handle the case where endpoints_data might be a dict with 'endpoints' key
-        if isinstance(endpoints_data, dict) and "endpoints" in endpoints_data:
-            endpoints_list = endpoints_data["endpoints"]
-        elif isinstance(endpoints_data, list):
-            endpoints_list = endpoints_data
-        else:
-            logger.error("Invalid endpoints data format: %s", type(endpoints_data))
-            return {}
+        endpoints_list = endpoints_data
 
         if not endpoints_list:
             logger.error("No endpoints data provided")
@@ -220,7 +220,7 @@ class CiscoClientNDFC(CiscoClientController):
         # Check if MSD fabric by looking for MSD endpoints in data
         self._detect_msd_fabric_from_endpoints(endpoints_list)
 
-        result = {}
+        result: dict[str, Any] = {}
 
         # First pass: Process Fabric_Configuration to extract fabric ID
         self._extract_fabric_id_from_endpoints(endpoints_list, result)
@@ -262,7 +262,9 @@ class CiscoClientNDFC(CiscoClientController):
         logger.info("Completed NDFC data collection")
         return result
 
-    def _detect_msd_fabric_from_endpoints(self, endpoints_data: list[dict[str, Any]]):
+    def _detect_msd_fabric_from_endpoints(
+        self, endpoints_data: list[dict[str, Any]]
+    ) -> None:
         """
         Detect MSD fabric by building MSD tree structure.
 
@@ -363,7 +365,7 @@ class CiscoClientNDFC(CiscoClientController):
 
     def _extract_fabric_id_from_endpoints(
         self, endpoints_data: list[dict[str, Any]], result: dict[str, Any]
-    ):
+    ) -> None:
         """
         Extract fabric ID from Fabric_Configuration endpoint to use for variable replacement.
 
@@ -441,7 +443,9 @@ class CiscoClientNDFC(CiscoClientController):
             logger.warning("Error extracting fabric ID: %s", str(e))
             self.fabric_id = None
 
-    def _process_msd_endpoint(self, endpoint: dict[str, Any], result: dict[str, Any]):
+    def _process_msd_endpoint(
+        self, endpoint: dict[str, Any], result: dict[str, Any]
+    ) -> None:
         """
         Process MSD-specific endpoint using YAML configuration.
 
@@ -488,7 +492,7 @@ class CiscoClientNDFC(CiscoClientController):
 
     def _process_endpoint_for_msd_fabrics(
         self, endpoint: dict[str, Any], result: dict[str, Any]
-    ):
+    ) -> None:
         """
         Process endpoint for each fabric in MSD deployment (root + all members).
 
@@ -559,7 +563,7 @@ class CiscoClientNDFC(CiscoClientController):
 
     def _process_endpoint_single_site(
         self, endpoint: dict[str, Any], result: dict[str, Any]
-    ):
+    ) -> None:
         """
         Process endpoint for single-site fabric using YAML configuration.
 
@@ -643,7 +647,7 @@ class CiscoClientNDFC(CiscoClientController):
         msd_root = self.msd_topology.get("msd_root")
         return fabric_name == msd_root
 
-    def _update_fabric_id_for_current_fabric(self, result: dict[str, Any]):
+    def _update_fabric_id_for_current_fabric(self, result: dict[str, Any]) -> None:
         """
         Update fabric ID for the current fabric context by looking up Fabric_Configuration data.
 
@@ -684,7 +688,9 @@ class CiscoClientNDFC(CiscoClientController):
             self.fabric_name,
         )
 
-    def _extract_serial_numbers_from_switches(self, discovered_switches_data):
+    def _extract_serial_numbers_from_switches(
+        self, discovered_switches_data: list[dict[str, Any]]
+    ) -> list[str]:
         """
         Extract serial numbers from Discovered_Switches endpoint data.
 
@@ -694,7 +700,7 @@ class CiscoClientNDFC(CiscoClientController):
         Returns:
             list: List of serial numbers found in the switches data
         """
-        serial_numbers = []
+        serial_numbers: list[str] = []
 
         for switch_entry in discovered_switches_data:
             data = switch_entry.get("data", {})
@@ -732,7 +738,9 @@ class CiscoClientNDFC(CiscoClientController):
         )
         return serial_numbers
 
-    def _process_policies_endpoint_with_filtering(self, endpoint, endpoint_dict):
+    def _process_policies_endpoint_with_filtering(
+        self, endpoint: dict[str, Any], endpoint_dict: dict[str, Any]
+    ) -> None:
         """
         Process Policies endpoint by fetching all policies and filtering by discovered switch serial numbers, autogenerated policies, policies based on specific templates.
 
@@ -886,11 +894,11 @@ class CiscoClientNDFC(CiscoClientController):
 
     def _filter_by_discovered_Serial_numbers(
         self,
-        data,
-        endpoint_dict,
-        serial_fields=None,
-        match_any=True,
-    ):
+        data: Any,
+        endpoint_dict: dict[str, Any],
+        serial_fields: str | list[str] | None = None,
+        match_any: bool = True,
+    ) -> list[dict[str, Any]]:
         """
         Filter items to include only those that reference serial numbers discovered in
         the previously fetched Discovered_Switches endpoint.
@@ -934,7 +942,7 @@ class CiscoClientNDFC(CiscoClientController):
             return []
 
         # Normalize incoming payload into a list of items
-        items = []
+        items: list[Any] = []
         if isinstance(data, list):
             items = data
         elif isinstance(data, dict):
@@ -949,7 +957,7 @@ class CiscoClientNDFC(CiscoClientController):
             logger.warning("Unexpected endpoint data format: %s", type(data))
             return []
 
-        def _iter_values_by_path(obj, path):
+        def _iter_values_by_path(obj: Any, path: str) -> Iterator[Any]:
             """Yield values from obj following a dot-separated path. Supports list traversal."""
             if obj is None:
                 return
@@ -976,11 +984,11 @@ class CiscoClientNDFC(CiscoClientController):
                     for el in obj:
                         yield from _iter_values_by_path(el, tail_path or head)
 
-        def _recursive_serial_candidates(obj):
+        def _recursive_serial_candidates(obj: Any) -> list[str]:
             """Recursively find candidate serial values by key heuristics (auto mode)."""
             if obj is None:
                 return []
-            candidates = []
+            candidates: list[str] = []
             if isinstance(obj, dict):
                 for k, v in obj.items():
                     key_lower = str(k).lower()
@@ -1012,7 +1020,7 @@ class CiscoClientNDFC(CiscoClientController):
         else:
             fields_to_check = None  # auto/heuristic mode
 
-        filtered_items = []
+        filtered_items: list[dict[str, Any]] = []
 
         logger.debug("Processing %d items for serial filtering", len(items))
 
@@ -1056,7 +1064,9 @@ class CiscoClientNDFC(CiscoClientController):
 
         return filtered_items
 
-    def _filter_autogenerated_policies(self, policies_data):
+    def _filter_autogenerated_policies(
+        self, policies_data: Any
+    ) -> list[dict[str, Any]]:
         """
         Filter policies data to only include policies with "autoGenerated" set to false.
 
@@ -1072,18 +1082,16 @@ class CiscoClientNDFC(CiscoClientController):
             # Check for common NDFC response patterns
             if "data" in policies_data and isinstance(policies_data["data"], list):
                 policies_list = policies_data["data"]
-            elif isinstance(policies_data, dict):
+            else:
                 # Single policy object - convert to list for consistent processing
                 policies_list = [policies_data]
-            else:
-                policies_list = []
         elif isinstance(policies_data, list):
             policies_list = policies_data
         else:
             logger.warning("Unexpected policies data format: %s", type(policies_data))
             return []
 
-        filtered_policies = []
+        filtered_policies: list[dict[str, Any]] = []
 
         logger.debug("Processing %d policies for filtering", len(policies_list))
 
@@ -1113,7 +1121,9 @@ class CiscoClientNDFC(CiscoClientController):
 
         return filtered_policies
 
-    def _filter_specyfic_template_policies(self, policies_data, template_names):
+    def _filter_specyfic_template_policies(
+        self, policies_data: Any, template_names: list[str]
+    ) -> list[dict[str, Any]]:
         """
         Filter out policies data which are based on specific templates.
 
@@ -1130,18 +1140,16 @@ class CiscoClientNDFC(CiscoClientController):
             # Check for common NDFC response patterns
             if "data" in policies_data and isinstance(policies_data["data"], list):
                 policies_list = policies_data["data"]
-            elif isinstance(policies_data, dict):
+            else:
                 # Single policy object - convert to list for consistent processing
                 policies_list = [policies_data]
-            else:
-                policies_list = []
         elif isinstance(policies_data, list):
             policies_list = policies_data
         else:
             logger.warning("Unexpected policies data format: %s", type(policies_data))
             return []
 
-        filtered_policies = []
+        filtered_policies: list[dict[str, Any]] = []
         template_names_set = set(template_names)  # Convert to set for faster lookup
 
         logger.debug(
@@ -1178,7 +1186,7 @@ class CiscoClientNDFC(CiscoClientController):
 
         return filtered_policies
 
-    def _fix_escaped_json_in_data(self, data):
+    def _fix_escaped_json_in_data(self, data: Any) -> None:
         """
         Recursively traverse the data structure and fix escaped JSON strings
         in vrfTemplateConfig and networkTemplateConfig fields.
@@ -1221,7 +1229,9 @@ class CiscoClientNDFC(CiscoClientController):
             for item in data:
                 self._fix_escaped_json_in_data(item)
 
-    def _process_children_endpoints(self, parent_endpoint, endpoint_dict):
+    def _process_children_endpoints(
+        self, parent_endpoint: dict[str, Any], endpoint_dict: dict[str, Any]
+    ) -> None:
         """
         Process children endpoints for a given parent endpoint.
         Specifically handles Network_Configuration -> Network_Attachments logic.
@@ -1254,7 +1264,7 @@ class CiscoClientNDFC(CiscoClientController):
                 "Generic children processing not yet implemented for: %s", parent_name
             )
 
-    def _process_attachment_data(self, attachment_data):
+    def _process_attachment_data(self, attachment_data: Any) -> list[Any]:
         """
         Process the raw attachment data from the API response.
 
@@ -1268,7 +1278,7 @@ class CiscoClientNDFC(CiscoClientController):
         # Handle different response structures
         if isinstance(attachment_data, list):
             # Check if list contains objects with lanAttachList
-            processed_data = []
+            processed_data: list[Any] = []
             for item in attachment_data:
                 if isinstance(item, dict) and "lanAttachList" in item:
                     # Extract the lanAttachList from each item
@@ -1299,7 +1309,9 @@ class CiscoClientNDFC(CiscoClientController):
             logger.warning("Unexpected attachment data type: %s", type(attachment_data))
             return []
 
-    def _process_switch_interfaces(self, parent_endpoint, endpoint_dict):
+    def _process_switch_interfaces(
+        self, parent_endpoint: dict[str, Any], endpoint_dict: dict[str, Any]
+    ) -> None:
         """
         Process interface children endpoints for Discovered_Switches.
         Fetches interface data for each discovered switch and adds it to the switch data.
@@ -1501,7 +1513,7 @@ class CiscoClientNDFC(CiscoClientController):
                         )
                         switch["interfaces"][child_name] = []
 
-    def _process_interface_data(self, interface_data):
+    def _process_interface_data(self, interface_data: Any) -> list[Any]:
         """
         Process the raw interface data from the API response.
 
@@ -1531,7 +1543,9 @@ class CiscoClientNDFC(CiscoClientController):
             logger.warning("Unexpected interface data type: %s", type(interface_data))
             return []
 
-    def _process_vrf_attachments(self, parent_endpoint, endpoint_dict):
+    def _process_vrf_attachments(
+        self, parent_endpoint: dict[str, Any], endpoint_dict: dict[str, Any]
+    ) -> None:
         """
         Process VRF_Attachments children endpoints for VRF_Configuration.
         Only processes vrfs with vrfStatus = "DEPLOYED".
@@ -1637,7 +1651,9 @@ class CiscoClientNDFC(CiscoClientController):
                     else:
                         logger.debug("Skipping vrf with missing vrfName")
 
-    def _process_network_attachments(self, parent_endpoint, endpoint_dict):
+    def _process_network_attachments(
+        self, parent_endpoint: dict[str, Any], endpoint_dict: dict[str, Any]
+    ) -> None:
         """
         Process Network_Attachments children endpoints for Network_Configuration.
         Only processes networks with networkStatus = "DEPLOYED".
@@ -1747,7 +1763,9 @@ class CiscoClientNDFC(CiscoClientController):
                     else:
                         logger.debug("Skipping network with missing networkName")
 
-    def _process_port_channel_children(self, parent_endpoint, endpoint_dict):
+    def _process_port_channel_children(
+        self, parent_endpoint: dict[str, Any], endpoint_dict: dict[str, Any]
+    ) -> None:
         """
         Process children endpoints for Port-Channel interface types (TrunkPort-Channel, AccessPort-Channel, etc.).
         Fetches child endpoint data (like vPCInterfaceSetting) for each Port-Channel interface.
@@ -1779,6 +1797,10 @@ class CiscoClientNDFC(CiscoClientController):
             len(children_endpoints),
             parent_name,
         )
+
+        if self.client is None:
+            logger.error("Client not initialized")
+            return
 
         # Get Port-Channel data from the endpoint_dict
         port_channels = endpoint_dict.get(parent_name, [])
@@ -1858,7 +1880,9 @@ class CiscoClientNDFC(CiscoClientController):
             processed_count,
         )
 
-    def _process_vpc_pairs_children(self, parent_endpoint, endpoint_dict):
+    def _process_vpc_pairs_children(
+        self, parent_endpoint: dict[str, Any], endpoint_dict: dict[str, Any]
+    ) -> None:
         """
         Process children endpoints for VPC pair types (VPC_Pairs).
         Fetches child endpoint data (like VPC_PeerLinkSettings) for each VPC pair.
@@ -1890,6 +1914,10 @@ class CiscoClientNDFC(CiscoClientController):
             parent_name,
         )
 
+        if self.client is None:
+            logger.error("Client not initialized")
+            return
+
         # Get VPC pairs data from the endpoint_dict
         vpc_pairs_entries = endpoint_dict.get(parent_name, [])
 
@@ -1899,7 +1927,7 @@ class CiscoClientNDFC(CiscoClientController):
 
         # Extract VPC pairs from the nested data structure
         # VPC_Pairs structure: [{"data": [vpc_pair_objects], "endpoint": "...", "fabric": "..."}]
-        all_vpc_pairs = []
+        all_vpc_pairs: list[dict[str, Any]] = []
         for entry in vpc_pairs_entries:
             if isinstance(entry, dict) and "data" in entry:
                 vpc_data = entry["data"]
@@ -1972,7 +2000,9 @@ class CiscoClientNDFC(CiscoClientController):
             processed_count,
         )
 
-    def _process_serial_interface_children(self, parent_endpoint, endpoint_dict):
+    def _process_serial_interface_children(
+        self, parent_endpoint: dict[str, Any], endpoint_dict: dict[str, Any]
+    ) -> None:
         """
         Process children endpoints for interface types that use serialNumber + ifName pattern.
         Fetches child endpoint data (like LoopbackInterfaceSetting) for each interface.
@@ -2005,6 +2035,10 @@ class CiscoClientNDFC(CiscoClientController):
             len(children_endpoints),
             parent_name,
         )
+
+        if self.client is None:
+            logger.error("Client not initialized")
+            return
 
         # Get interface data from the endpoint_dict
         interfaces = endpoint_dict.get(parent_name, [])
@@ -2081,8 +2115,8 @@ class CiscoClientNDFC(CiscoClientController):
         )
 
     def _process_nested_children_for_interfaces(
-        self, parent_endpoint, interface_data, host_name
-    ):
+        self, parent_endpoint: dict[str, Any], interface_data: Any, host_name: str
+    ) -> None:
         """
         Process nested children endpoints for interface data (like Port-Channel interfaces -> vPCInterfaceSetting).
 
@@ -2103,6 +2137,10 @@ class CiscoClientNDFC(CiscoClientController):
             parent_name,
             host_name,
         )
+
+        if self.client is None:
+            logger.error("Client not initialized")
+            return
 
         # Process each interface entry in the interface_data
         for interface_entry in (
@@ -2249,7 +2287,7 @@ class CiscoClientNDFC(CiscoClientController):
                         # Set empty data on error to maintain consistent structure
                         interface_entry[child_name] = {}
 
-    def _parse_vpc_entity_id(self, vpc_entity_id: str) -> tuple:
+    def _parse_vpc_entity_id(self, vpc_entity_id: str) -> tuple[str | None, str | None]:
         """
         Parse vpcEntityId string to extract vpcPair and vPC_name.
 
@@ -2309,7 +2347,19 @@ class CiscoClientNDFC(CiscoClientController):
         try:
             with open(endpoints_file, encoding="utf-8") as f:
                 yaml_data = self.yaml.load(f)
-                return yaml_data.get("endpoints", [])
+                if isinstance(yaml_data, dict):
+                    endpoints = yaml_data.get("endpoints", [])
+                    if isinstance(endpoints, list):
+                        return cast(
+                            list[dict[str, Any]],
+                            [
+                                endpoint
+                                for endpoint in endpoints
+                                if isinstance(endpoint, dict)
+                            ],
+                        )
+                logger.error("Invalid endpoints file format: %s", type(yaml_data))
+                return []
         except FileNotFoundError:
             logger.error("Endpoints file not found: %s", endpoints_file)
             return []
