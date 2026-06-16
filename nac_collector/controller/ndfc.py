@@ -1231,9 +1231,7 @@ class CiscoClientNDFC(CiscoClientController):
         elif parent_name in self.VPC_PAIR_TYPES:
             self._process_vpc_pairs_children(parent_endpoint, endpoint_dict)
         else:
-            logger.warning(
-                "No children processing handler for: %s", parent_name
-            )
+            logger.warning("No children processing handler for: %s", parent_name)
 
     def _process_attachment_data(self, attachment_data: Any) -> list[Any]:
         """
