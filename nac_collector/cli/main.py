@@ -1,5 +1,4 @@
 import logging
-import os
 import time
 from enum import Enum
 from typing import Annotated
@@ -209,7 +208,6 @@ def main(
         raise typer.Exit(1)
 
     output_file = output or "nac-collector.zip"
-    fabric_name = os.getenv("NDFC_FABRIC_NAME")
 
     # Handle device-based solutions
     if solution in DEVICE_BASED_SOLUTIONS:
@@ -329,16 +327,6 @@ def main(
             console.print("[red]URL is required for controller-based solutions[/red]")
             raise typer.Exit(1)
 
-        # Validate NDFC-specific requirements
-        if solution == Solution.NDFC and not fabric_name:
-            console.print(
-                "[red]NDFC_FABRIC_NAME environment variable is required for NDFC solution[/red]"
-            )
-            console.print(
-                "[yellow]Set NDFC_FABRIC_NAME to the target fabric name before running the collector.[/yellow]"
-            )
-            raise typer.Exit(1)
-
         if cisco_client_class:
             client: CiscoClientController
             if solution == Solution.NDO:
@@ -389,7 +377,6 @@ def main(
                     timeout=timeout,
                     ssl_verify=False,
                     domain=domain or "local",
-                    fabric_name=fabric_name,
                 )
             else:
                 # For other solutions, no api_token support

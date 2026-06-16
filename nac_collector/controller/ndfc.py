@@ -6,6 +6,7 @@ with MSD fabric support using only YAML-defined endpoints.
 
 import json
 import logging
+import os
 from collections.abc import Iterator
 from typing import Any, cast
 
@@ -68,7 +69,7 @@ class CiscoClientNDFC(CiscoClientController):
             **kwargs: Arbitrary keyword arguments passed to parent CiscoClientController
         """
         # Extract NDFC-specific parameters before calling parent
-        fabric_name = kwargs.pop("fabric_name", None)
+        fabric_name = kwargs.pop("fabric_name", None) or os.getenv("NDFC_FABRIC_NAME")
         domain = kwargs.pop("domain", "local")
         self.fabric_name: str | None = (
             str(fabric_name) if fabric_name is not None else None
@@ -94,7 +95,7 @@ class CiscoClientNDFC(CiscoClientController):
     def authenticate(self) -> bool:
         """
         Authenticate with NDFC using the credentials provided.
-        Uses the /logon endpoint for NDFC authentication.
+        Uses the /login endpoint for NDFC authentication.
         This is the ONLY hardcoded endpoint - everything else comes from YAML.
 
         Returns:
@@ -169,33 +170,6 @@ class CiscoClientNDFC(CiscoClientController):
         except Exception as e:
             logger.error("Authentication error: %s", str(e))
             return False
-
-    def collect_data(self, endpoints_file: str) -> dict[str, Any]:
-        """
-        Collect data from NDFC using endpoints defined in YAML file.
-
-        Args:
-            endpoints_file: Path to YAML file containing endpoint definitions
-
-        Returns:
-            Dict[str, Any]: Collected data organized by endpoint name
-        """
-        logger.info(
-            "Starting NDFC data collection using endpoints file: %s", endpoints_file
-        )
-
-        if not self.authenticate():
-            logger.error("Authentication failed, cannot collect data")
-            return {}
-
-        # Load endpoints from YAML file
-        endpoints_data = self.load_endpoints_from_file(endpoints_file)
-        if not endpoints_data:
-            logger.error("No endpoints loaded from file: %s", endpoints_file)
-            return {}
-
-        # Process endpoints using the abstract method
-        return self.get_from_endpoints_data(endpoints_data)
 
     def get_from_endpoints_data(
         self, endpoints_data: list[dict[str, Any]]
@@ -1234,7 +1208,11 @@ class CiscoClientNDFC(CiscoClientController):
     ) -> None:
         """
         Process children endpoints for a given parent endpoint.
-        Specifically handles Network_Configuration -> Network_Attachments logic.
+
+        Routes to the appropriate handler based on the parent endpoint name.
+        Port-Channel interface types (TrunkPort-Channel, AccessPort-Channel) are
+        handled as nested children within Discovered_Switches processing, not at
+        this top-level routing layer.
 
         Parameters:
             parent_endpoint (dict): The parent endpoint configuration.
@@ -1243,25 +1221,18 @@ class CiscoClientNDFC(CiscoClientController):
         parent_name = parent_endpoint["name"]
         logger.debug("Processing children endpoints for parent: %s", parent_name)
 
-        # Special handling for child endpoints based on parent type
+        # Route to the appropriate handler based on parent type
         if parent_name == "Network_Configuration":
             self._process_network_attachments(parent_endpoint, endpoint_dict)
         elif parent_name == "VRF_Configuration":
             self._process_vrf_attachments(parent_endpoint, endpoint_dict)
-
         elif parent_name == "Discovered_Switches":
             self._process_switch_interfaces(parent_endpoint, endpoint_dict)
-        elif parent_name in self.PORT_CHANNEL_INTERFACE_TYPES:
-            # Handle Port-Channel interfaces that use vpcEntityId pattern
-            self._process_port_channel_children(parent_endpoint, endpoint_dict)
         elif parent_name in self.VPC_PAIR_TYPES:
-            # Handle VPC pair endpoints that use peerOneId pattern
             self._process_vpc_pairs_children(parent_endpoint, endpoint_dict)
-
         else:
-            # Generic children processing for other endpoints (if needed in the future)
             logger.warning(
-                "Generic children processing not yet implemented for: %s", parent_name
+                "No children processing handler for: %s", parent_name
             )
 
     def _process_attachment_data(self, attachment_data: Any) -> list[Any]:
@@ -1763,123 +1734,6 @@ class CiscoClientNDFC(CiscoClientController):
                     else:
                         logger.debug("Skipping network with missing networkName")
 
-    def _process_port_channel_children(
-        self, parent_endpoint: dict[str, Any], endpoint_dict: dict[str, Any]
-    ) -> None:
-        """
-        Process children endpoints for Port-Channel interface types (TrunkPort-Channel, AccessPort-Channel, etc.).
-        Fetches child endpoint data (like vPCInterfaceSetting) for each Port-Channel interface.
-
-        This method handles all interface types that:
-        1. Have a 'vpcEntityId' field with format "serial1~serial2~vpcX"
-        2. Are defined in the PORT_CHANNEL_INTERFACE_TYPES class constant
-
-        To add support for new Port-Channel interface types:
-        1. Add the interface type name to PORT_CHANNEL_INTERFACE_TYPES constant
-        2. Define the interface endpoint and children in the YAML configuration
-        3. No code changes are required as this method handles them generically
-
-        Parameters:
-            parent_endpoint (dict): The parent Port-Channel endpoint.
-            endpoint_dict (dict): The dictionary containing the processed data.
-        """
-        parent_name = parent_endpoint["name"]
-
-        # Get the children endpoint configurations
-        children_endpoints = parent_endpoint.get("children", [])
-
-        if not children_endpoints:
-            logger.debug("No children endpoints defined for %s", parent_name)
-            return
-
-        logger.info(
-            "Processing %d children endpoints for %s",
-            len(children_endpoints),
-            parent_name,
-        )
-
-        if self.client is None:
-            logger.error("Client not initialized")
-            return
-
-        # Get Port-Channel data from the endpoint_dict
-        port_channels = endpoint_dict.get(parent_name, [])
-
-        if not port_channels:
-            logger.warning("No %s data found to process children for", parent_name)
-            return
-
-        # Process each Port-Channel interface
-        processed_count = 0
-        for port_channel_data in port_channels:
-            # Extract vpcEntityId which contains the pattern "serial1~serial2~vpcX"
-            vpc_entity_id = port_channel_data.get("vpcEntityId")
-
-            if not vpc_entity_id:
-                logger.debug("No vpcEntityId found in %s data, skipping", parent_name)
-                continue
-
-            # Parse the vpcEntityId to extract vpcPair and vPC_name
-            vpc_pair, vpc_name = self._parse_vpc_entity_id(vpc_entity_id)
-
-            if not vpc_pair or not vpc_name:
-                logger.warning("Failed to parse vpcEntityId: %s", vpc_entity_id)
-                continue
-
-            logger.debug(
-                "Processing %s children for vpcPair=%s, vPC_name=%s",
-                parent_name,
-                vpc_pair,
-                vpc_name,
-            )
-
-            # Process each child endpoint
-            for child_endpoint in children_endpoints:
-                child_name = child_endpoint["name"]
-                child_url = child_endpoint["endpoint"]
-
-                # Replace variables in the child endpoint URL
-                child_url = child_url.replace("{{vpcPair}}", vpc_pair)
-                child_url = child_url.replace("{{vPC_name}}", vpc_name)
-
-                # Replace fabric ID if present
-                if self.fabric_id and "{{fabricID}}" in child_url:
-                    child_url = child_url.replace("{{fabricID}}", str(self.fabric_id))
-
-                logger.debug("Fetching child endpoint: %s -> %s", child_name, child_url)
-
-                try:
-                    response = self.client.get(f"{self.base_url}{child_url}")
-                    response.raise_for_status()
-                    child_data = response.json()
-
-                    # Save child data directly to the Port-Channel entry using the child endpoint name as key
-                    port_channel_data[child_name] = child_data
-
-                    processed_count += 1
-                    logger.debug(
-                        "Successfully processed and saved child endpoint %s to %s entry for %s",
-                        child_name,
-                        parent_name,
-                        vpc_name,
-                    )
-
-                except Exception as e:
-                    logger.error(
-                        "Error processing child endpoint %s for %s: %s",
-                        child_name,
-                        vpc_name,
-                        str(e),
-                    )
-                    # Set empty data on error to maintain consistent structure
-                    port_channel_data[child_name] = {}
-
-        logger.info(
-            "Completed processing %s children. Processed %d items",
-            parent_name,
-            processed_count,
-        )
-
     def _process_vpc_pairs_children(
         self, parent_endpoint: dict[str, Any], endpoint_dict: dict[str, Any]
     ) -> None:
@@ -1993,120 +1847,6 @@ class CiscoClientNDFC(CiscoClientController):
                     )
                     # Set empty data on error to maintain consistent structure
                     vpc_pair_data[child_name] = {}
-
-        logger.info(
-            "Completed processing %s children. Processed %d items",
-            parent_name,
-            processed_count,
-        )
-
-    def _process_serial_interface_children(
-        self, parent_endpoint: dict[str, Any], endpoint_dict: dict[str, Any]
-    ) -> None:
-        """
-        Process children endpoints for interface types that use serialNumber + ifName pattern.
-        Fetches child endpoint data (like LoopbackInterfaceSetting) for each interface.
-
-        This method handles all interface types that:
-        1. Have 'serialNo' and 'ifName' fields in the interface data
-        2. Are defined in the SERIAL_INTERFACE_TYPES class constant
-        3. Use {{serialNumber}} and {{ifName}} placeholders in child endpoints
-
-        To add support for new serial-based interface types:
-        1. Add the interface type name to SERIAL_INTERFACE_TYPES constant
-        2. Define the interface endpoint and children in the YAML configuration
-        3. No code changes are required as this method handles them generically
-
-        Parameters:
-            parent_endpoint (dict): The parent interface endpoint.
-            endpoint_dict (dict): The dictionary containing the processed data.
-        """
-        parent_name = parent_endpoint["name"]
-
-        # Get the children endpoint configurations
-        children_endpoints = parent_endpoint.get("children", [])
-
-        if not children_endpoints:
-            logger.debug("No children endpoints defined for %s", parent_name)
-            return
-
-        logger.info(
-            "Processing %d children endpoints for %s",
-            len(children_endpoints),
-            parent_name,
-        )
-
-        if self.client is None:
-            logger.error("Client not initialized")
-            return
-
-        # Get interface data from the endpoint_dict
-        interfaces = endpoint_dict.get(parent_name, [])
-
-        if not interfaces:
-            logger.warning("No %s data found to process children for", parent_name)
-            return
-
-        # Process each interface
-        processed_count = 0
-        for interface_data in interfaces:
-            # Extract serialNo and ifName from the interface data
-            serial_number = interface_data.get("serialNo")
-            if_name = interface_data.get("ifName")
-
-            if not serial_number or not if_name:
-                logger.debug(
-                    "Missing serialNo or ifName in %s data, skipping", parent_name
-                )
-                continue
-
-            logger.debug(
-                "Processing %s children for serialNumber=%s, ifName=%s",
-                parent_name,
-                serial_number,
-                if_name,
-            )
-
-            # Process each child endpoint
-            for child_endpoint in children_endpoints:
-                child_name = child_endpoint["name"]
-                child_url = child_endpoint["endpoint"]
-
-                # Replace variables in the child endpoint URL
-                child_url = child_url.replace("{{serialNumber}}", serial_number)
-                child_url = child_url.replace("{{ifName}}", if_name)
-
-                # Replace fabric ID if present
-                if self.fabric_id and "{{fabricID}}" in child_url:
-                    child_url = child_url.replace("{{fabricID}}", str(self.fabric_id))
-
-                logger.debug("Fetching child endpoint: %s -> %s", child_name, child_url)
-
-                try:
-                    response = self.client.get(f"{self.base_url}{child_url}")
-                    response.raise_for_status()
-                    child_data = response.json()
-
-                    # Save child data directly to the interface entry using the child endpoint name as key
-                    interface_data[child_name] = child_data
-
-                    processed_count += 1
-                    logger.debug(
-                        "Successfully processed and saved child endpoint %s to %s entry for %s",
-                        child_name,
-                        parent_name,
-                        if_name,
-                    )
-
-                except Exception as e:
-                    logger.error(
-                        "Error processing child endpoint %s for %s: %s",
-                        child_name,
-                        if_name,
-                        str(e),
-                    )
-                    # Set empty data on error to maintain consistent structure
-                    interface_data[child_name] = {}
 
         logger.info(
             "Completed processing %s children. Processed %d items",
