@@ -1,5 +1,3 @@
-from unittest.mock import patch
-
 import pytest
 
 from nac_collector.controller.ndfc import CiscoClientNDFC

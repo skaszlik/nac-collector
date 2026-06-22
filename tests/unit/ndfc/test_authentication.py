@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import httpx
 import pytest
@@ -122,7 +122,9 @@ class TestAuthSuccess:
         mock_response.json.return_value = {"token": "tok"}
         mock_response.headers = {}
 
-        with patch.object(httpx.Client, "post", return_value=mock_response) as mock_post:
+        with patch.object(
+            httpx.Client, "post", return_value=mock_response
+        ) as mock_post:
             ndfc_client.authenticate()
 
         mock_post.assert_called_once_with(
