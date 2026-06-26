@@ -1,5 +1,6 @@
 import logging
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 from rich.progress import (
@@ -256,8 +257,10 @@ class CiscoClientISE(CiscoClientController):
                     # Create empty list of parent_endpoint_ids
                     parent_endpoint_ids = []
 
+                    id_field = endpoint.get("id_field")
                     for item in endpoint_dict[endpoint["name"]]:
-                        id_value = self.get_id_value(item.get("data", {}))
+                        data = item.get("data", {})
+                        id_value = self._resolve_id(data, id_field)
                         if id_value is not None:
                             parent_endpoint_ids.append(id_value)
 
@@ -277,11 +280,14 @@ class CiscoClientISE(CiscoClientController):
                                 )
                             )
 
-                            # Replace '%v' in the endpoint with the id
+                            # Replace '%v' in the endpoint with the id.
+                            # Percent-encode the id segment: when id_field is a
+                            # name (not a UUID) it may contain spaces or other
+                            # characters that are invalid in a URL path.
                             children_joined_endpoint = (
                                 endpoint["endpoint"]
                                 + "/"
-                                + id_
+                                + quote(id_, safe="")
                                 + children_endpoint["endpoint"]
                             )
 
@@ -295,7 +301,9 @@ class CiscoClientISE(CiscoClientController):
                             for index, value in enumerate(
                                 endpoint_dict[endpoint["name"]]
                             ):
-                                if self.get_id_value(value.get("data", {})) == id_:
+                                item_data = value.get("data", {})
+                                match_value = self._resolve_id(item_data, id_field)
+                                if match_value == id_:
                                     endpoint_dict[endpoint["name"]][index].setdefault(
                                         "children", {}
                                     )[
@@ -351,6 +359,13 @@ class CiscoClientISE(CiscoClientController):
                 ers_data.append(value)
 
         return ers_data
+
+    @staticmethod
+    def _resolve_id(data: dict[str, Any], id_field: str | None) -> str | None:
+        if id_field:
+            value = data.get(id_field)
+            return str(value) if value else None
+        return CiscoClientISE.get_id_value(data)
 
     @staticmethod
     def get_id_value(i: dict[str, Any]) -> str | None:
