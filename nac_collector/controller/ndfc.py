@@ -7,7 +7,6 @@ with MSD fabric support using only YAML-defined endpoints.
 import json
 import logging
 import os
-from collections.abc import Iterator
 from typing import Any, cast
 
 import httpx
@@ -101,6 +100,12 @@ class CiscoClientNDFC(CiscoClientController):
         Returns:
             bool: True if authentication successful, False otherwise
         """
+        if not self.fabric_name:
+            logger.error(
+                "NDFC requires a fabric name. Set NDFC_FABRIC_NAME or pass --fabric-name."
+            )
+            return False
+
         if not self.username or not self.password:
             logger.error("Username and password are required for NDFC authentication")
             return False
@@ -765,14 +770,21 @@ class CiscoClientNDFC(CiscoClientController):
         try:
             logger.debug("Fetching all policies from endpoint: %s", endpoint_url)
 
-            # Make the API request using the parent class fetch_data method
-            all_policies_data = self.fetch_data(endpoint_url)
+            # The policies endpoint is paginated; use the parent class pagination
+            # helper so all pages are retrieved (fabrics can hold large policy sets).
+            all_policies_data = self.fetch_data_pagination(endpoint_url)
 
             if all_policies_data is not None:
                 logger.info("Successfully retrieved all policies data")
 
                 # Fix escaped JSON strings in template config fields
                 self._fix_escaped_json_in_data(all_policies_data)
+
+                # Total received policies (pagination may wrap the list in "response")
+                if isinstance(all_policies_data, dict):
+                    total_policies_received = len(all_policies_data.get("response", []))
+                else:
+                    total_policies_received = len(all_policies_data)
 
                 # For reporting/metadata only: gather serials from Discovered_Switches
                 serial_numbers = self._extract_serial_numbers_from_switches(
@@ -799,7 +811,7 @@ class CiscoClientNDFC(CiscoClientController):
                 )
 
                 # Filter policies based on discovered switch serial numbers (extracted internally)
-                filtered_policies = self._filter_by_discovered_Serial_numbers(
+                filtered_policies = self._filter_by_discovered_serial_numbers(
                     all_policies_data, endpoint_dict
                 )
 
@@ -813,7 +825,7 @@ class CiscoClientNDFC(CiscoClientController):
                     "Applying template filtering with exclude_templates: %s",
                     self.exclude_templates,
                 )
-                filtered_policies = self._filter_specyfic_template_policies(
+                filtered_policies = self._filter_specific_template_policies(
                     filtered_policies, self.exclude_templates
                 )
 
@@ -824,9 +836,7 @@ class CiscoClientNDFC(CiscoClientController):
                         "fabric": self.fabric_name,
                         "endpoint": endpoint_url,
                         "filtered_serial_numbers": serial_numbers,
-                        "total_policies_received": len(all_policies_data)
-                        if isinstance(all_policies_data, list)
-                        else 1,
+                        "total_policies_received": total_policies_received,
                         "filtered_policies_count": len(filtered_policies)
                         if isinstance(filtered_policies, list)
                         else 1,
@@ -838,9 +848,7 @@ class CiscoClientNDFC(CiscoClientController):
                     len(filtered_policies)
                     if isinstance(filtered_policies, list)
                     else 1,
-                    len(all_policies_data)
-                    if isinstance(all_policies_data, list)
-                    else 1,
+                    total_policies_received,
                     len(serial_numbers),
                 )
 
@@ -866,31 +874,24 @@ class CiscoClientNDFC(CiscoClientController):
                 }
             )
 
-    def _filter_by_discovered_Serial_numbers(
+    def _filter_by_discovered_serial_numbers(
         self,
         data: Any,
         endpoint_dict: dict[str, Any],
-        serial_fields: str | list[str] | None = None,
-        match_any: bool = True,
     ) -> list[dict[str, Any]]:
         """
         Filter items to include only those that reference serial numbers discovered in
         the previously fetched Discovered_Switches endpoint.
 
         This is generalized for any endpoint payload (Policies, VPC pairs, etc.).
+        Each item is matched by recursively scanning for any key containing 'serial'
+        and comparing the value against the discovered serial numbers.
 
         Parameters:
             data (dict or list): Raw data returned from an API endpoint (can be a list
                 of items or a dict possibly wrapped in common keys like 'data'/'response').
             endpoint_dict (dict): The aggregate endpoints dictionary containing
                 'Discovered_Switches' entries used to extract serial numbers.
-            serial_fields (str | list[str] | None): Optional field paths to check for
-                serial numbers within each item. Supports dot-separated nested paths.
-                When None, a recursive heuristic search looks for keys containing
-                'serial'.
-            match_any (bool): If True, include an item when any field path contains a
-                serial matching the discovered serials; if False, require all provided
-                field paths to match.
 
         Returns:
             list: Filtered list of items that reference the discovered serial numbers.
@@ -907,9 +908,8 @@ class CiscoClientNDFC(CiscoClientController):
         )
         serial_set = {sn for sn in discovered_serials if sn}
         logger.debug(
-            "Filtering endpoint items by discovered serial numbers (count=%d), fields=%s",
+            "Filtering endpoint items by discovered serial numbers (count=%d)",
             len(serial_set),
-            serial_fields if serial_fields is not None else "<auto>",
         )
         if not serial_set:
             logger.warning("No discovered serial numbers found; returning empty result")
@@ -931,35 +931,8 @@ class CiscoClientNDFC(CiscoClientController):
             logger.warning("Unexpected endpoint data format: %s", type(data))
             return []
 
-        def _iter_values_by_path(obj: Any, path: str) -> Iterator[Any]:
-            """Yield values from obj following a dot-separated path. Supports list traversal."""
-            if obj is None:
-                return
-            if not path:
-                yield obj
-                return
-            head, *tail = path.split(".")
-            tail_path = ".".join(tail) if tail else ""
-            if isinstance(obj, dict):
-                if head in obj:
-                    yield from _iter_values_by_path(obj[head], tail_path)
-            elif isinstance(obj, list):
-                # Head could be an index or a wildcard-like segment; try to cast to int
-                idx = None
-                try:
-                    idx = int(head)
-                except Exception:
-                    idx = None
-                if idx is not None:
-                    if 0 <= idx < len(obj):
-                        yield from _iter_values_by_path(obj[idx], tail_path)
-                else:
-                    # Iterate all and keep walking
-                    for el in obj:
-                        yield from _iter_values_by_path(el, tail_path or head)
-
         def _recursive_serial_candidates(obj: Any) -> list[str]:
-            """Recursively find candidate serial values by key heuristics (auto mode)."""
+            """Recursively find candidate serial values by key heuristics."""
             if obj is None:
                 return []
             candidates: list[str] = []
@@ -984,16 +957,6 @@ class CiscoClientNDFC(CiscoClientController):
                     candidates.extend(_recursive_serial_candidates(el))
             return candidates
 
-        # Normalize serial_fields to a list of paths or None
-        if isinstance(serial_fields, str):
-            fields_to_check = [serial_fields]
-        elif isinstance(serial_fields, list) and all(
-            isinstance(f, str) for f in serial_fields
-        ):
-            fields_to_check = serial_fields
-        else:
-            fields_to_check = None  # auto/heuristic mode
-
         filtered_items: list[dict[str, Any]] = []
 
         logger.debug("Processing %d items for serial filtering", len(items))
@@ -1003,31 +966,9 @@ class CiscoClientNDFC(CiscoClientController):
                 logger.debug("Skipping non-dict item: %s", item)
                 continue
 
-            matched = False
-
-            if fields_to_check:
-                # Gather discovered serials per field
-                discovered_by_field = []
-                for path in fields_to_check:
-                    values = [
-                        str(v)
-                        for v in _iter_values_by_path(item, path)
-                        if isinstance(v, str | int)
-                    ]
-                    discovered_by_field.append(set(values))
-
-                if match_any:
-                    # Any field containing a matching serial passes
-                    matched = any(bool(s & serial_set) for s in discovered_by_field)
-                else:
-                    # All fields must contain at least one matching serial
-                    matched = all(bool(s & serial_set) for s in discovered_by_field)
-            else:
-                # Auto/heuristic mode: recursively scan keys containing 'serial'
-                candidates = set(_recursive_serial_candidates(item))
-                matched = bool(candidates & serial_set)
-
-            if matched:
+            # Recursively scan keys containing 'serial' and match against discovered serials
+            candidates = set(_recursive_serial_candidates(item))
+            if candidates & serial_set:
                 filtered_items.append(item)
 
         logger.info(
@@ -1095,7 +1036,7 @@ class CiscoClientNDFC(CiscoClientController):
 
         return filtered_policies
 
-    def _filter_specyfic_template_policies(
+    def _filter_specific_template_policies(
         self, policies_data: Any, template_names: list[str]
     ) -> list[dict[str, Any]]:
         """
@@ -1137,7 +1078,7 @@ class CiscoClientNDFC(CiscoClientController):
         for policy in policies_list:
             if isinstance(policy, dict) and "templateName" in policy:
                 if isinstance(policy["templateName"], str):
-                    # Only include policies where autoGenerated is False
+                    # Only include policies whose templateName is not in the exclude list
                     if policy["templateName"] not in template_names_set:
                         filtered_policies.append(policy)
                         logger.debug(
@@ -1243,7 +1184,7 @@ class CiscoClientNDFC(CiscoClientController):
         Returns:
             list: Processed list of network attachments.
         """
-        logger.debug("Processing attachment data {{%s}}", attachment_data)
+        logger.debug("Processing attachment data %s", attachment_data)
         # Handle different response structures
         if isinstance(attachment_data, list):
             # Check if list contains objects with lanAttachList
@@ -1821,9 +1762,7 @@ class CiscoClientNDFC(CiscoClientController):
                 logger.debug("Fetching child endpoint: %s -> %s", child_name, child_url)
 
                 try:
-                    response = self.client.get(f"{self.base_url}{child_url}")
-                    response.raise_for_status()
-                    child_data = response.json()
+                    child_data = self.fetch_data(child_url)
 
                     # Save child data directly to the VPC pair entry using the child endpoint name as key
                     vpc_pair_data[child_name] = child_data
@@ -1934,9 +1873,7 @@ class CiscoClientNDFC(CiscoClientController):
                     )
 
                     try:
-                        response = self.client.get(f"{self.base_url}{child_url}")
-                        response.raise_for_status()
-                        child_data = response.json()
+                        child_data = self.fetch_data(child_url)
 
                         # Save child data directly to the interface entry using the child endpoint name as key
                         interface_entry[child_name] = child_data
@@ -2000,9 +1937,7 @@ class CiscoClientNDFC(CiscoClientController):
                     )
 
                     try:
-                        response = self.client.get(f"{self.base_url}{child_url}")
-                        response.raise_for_status()
-                        child_data = response.json()
+                        child_data = self.fetch_data(child_url)
 
                         # Save child data directly to the interface entry using the child endpoint name as key
                         interface_entry[child_name] = child_data
