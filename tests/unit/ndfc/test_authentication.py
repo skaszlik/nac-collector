@@ -142,6 +142,14 @@ class TestAuthFailure:
         assert result is False
         assert ndfc_client_no_creds.client is None
 
+    def test_authenticate_fails_without_fabric_name(self, ndfc_client):
+        ndfc_client.fabric_name = None
+
+        result = ndfc_client.authenticate()
+
+        assert result is False
+        assert ndfc_client.client is None
+
     def test_authenticate_fails_on_non_200_status(self, ndfc_client):
         mock_response = Mock()
         mock_response.status_code = 401
