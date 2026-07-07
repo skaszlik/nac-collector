@@ -14,6 +14,7 @@ from nac_collector.controller.catalystcenter import CiscoClientCATALYSTCENTER
 from nac_collector.controller.fmc import CiscoClientFMC
 from nac_collector.controller.ise import CiscoClientISE
 from nac_collector.controller.meraki import CiscoClientMERAKI
+from nac_collector.controller.ndfc import CiscoClientNDFC
 from nac_collector.controller.ndo import CiscoClientNDO
 from nac_collector.controller.sdwan import CiscoClientSDWAN
 from nac_collector.device.iosxe import CiscoClientIOSXE
@@ -56,6 +57,7 @@ class Solution(str, Enum):
     CDFMC = "CDFMC"
     CATALYSTCENTER = "CATALYSTCENTER"
     MERAKI = "MERAKI"
+    NDFC = "NDFC"
     IOSXE = "IOSXE"
     IOSXR = "IOSXR"
     NXOS = "NXOS"
@@ -130,7 +132,7 @@ def main(
         typer.Option(
             "--domain",
             envvar="NAC_DOMAIN",
-            help="Domain for authentication (defaults to 'DefaultAuth' for NDO, empty for others)",
+            help="Domain for authentication (defaults to 'DefaultAuth' for NDO, 'local' for NDFC, empty for others)",
         ),
     ] = None,
     url: Annotated[
@@ -303,6 +305,8 @@ def main(
             cisco_client_class = CiscoClientCATALYSTCENTER
         elif solution == Solution.MERAKI:
             cisco_client_class = CiscoClientMERAKI
+        elif solution == Solution.NDFC:
+            cisco_client_class = CiscoClientNDFC
 
         # Validate that api_token is only used with SDWAN
         if api_token and solution != Solution.SDWAN:
@@ -362,6 +366,17 @@ def main(
                     timeout=timeout,
                     ssl_verify=False,
                     api_token=api_token or "",
+                )
+            elif solution == Solution.NDFC:
+                client = CiscoClientNDFC(
+                    username=username,
+                    password=password,
+                    base_url=url,
+                    max_retries=MAX_RETRIES,
+                    retry_after=RETRY_AFTER,
+                    timeout=timeout,
+                    ssl_verify=False,
+                    domain=domain or "local",
                 )
             else:
                 # For other solutions, no api_token support
