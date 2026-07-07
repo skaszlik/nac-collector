@@ -121,8 +121,20 @@ class CiscoClientController(ABC):
             elif response.status_code == 200:
                 # If the status code is 200 (OK), return the response
                 return response
+            elif response.status_code == 404:
+                if response.content:
+                    self.logger.debug(
+                        "GET %s returned 404 — resource not available.", url
+                    )
+                else:
+                    self.logger.warning(
+                        "GET %s returned 404 with no body — endpoint may not be"
+                        " supported on this platform version.",
+                        url,
+                    )
+                return None
             else:
-                # If the status code is neither 429 nor 200, log an error and continue to the next iteration
+                # If the status code is neither 429, 200, nor 404, log an error and continue to the next iteration
                 self.logger.error(
                     "GET %s returned an unexpected status code: %s",
                     url,
@@ -226,7 +238,7 @@ class CiscoClientController(ABC):
             # Make the request to the given endpoint
             response = self.get_request(self.base_url + paginated_endpoint)
             if not response:
-                self.logger.error(
+                self.logger.debug(
                     "No valid response received for endpoint: %s", paginated_endpoint
                 )
                 return None
@@ -300,7 +312,9 @@ class CiscoClientController(ABC):
                 )
                 return None
         else:
-            self.logger.error("No valid response received for endpoint: %s", endpoint)
+            # get_request already logged the specific reason (error status code or
+            # 404 not-available) — avoid a redundant generic message here.
+            self.logger.debug("No valid response received for endpoint: %s", endpoint)
             return None
 
     def write_to_archive(
