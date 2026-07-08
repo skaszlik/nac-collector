@@ -101,6 +101,17 @@ class CiscoClientController(ABC):
                     "GET %s timed out after %s seconds.", url, self.timeout
                 )
                 continue
+            except httpx.TransportError as e:
+                self.logger.error("GET %s transport error (%s), retrying...", url, e)
+                time.sleep(self.retry_after)
+                try:
+                    if not self.authenticate():
+                        self.logger.warning("GET %s re-authentication failed.", url)
+                except httpx.TransportError as auth_err:
+                    self.logger.warning(
+                        "GET %s re-authentication also failed: %s", url, auth_err
+                    )
+                continue
 
             if response.status_code == 429:
                 # If the status code is 429 (Too Many Requests), wait for a certain amount of time before retrying
@@ -156,6 +167,7 @@ class CiscoClientController(ABC):
         Returns:
             response (httpx.Response): The response from the POST request.
         """
+        response = None
         for _ in range(self.max_retries):
             try:
                 # Send a POST request to the URL
@@ -167,6 +179,17 @@ class CiscoClientController(ABC):
                 self.logger.error(
                     "POST %s timed out after %s seconds.", url, self.timeout
                 )
+                continue
+            except httpx.TransportError as e:
+                self.logger.error("POST %s transport error (%s), retrying...", url, e)
+                time.sleep(self.retry_after)
+                try:
+                    if not self.authenticate():
+                        self.logger.warning("POST %s re-authentication failed.", url)
+                except httpx.TransportError as auth_err:
+                    self.logger.warning(
+                        "POST %s re-authentication also failed: %s", url, auth_err
+                    )
                 continue
 
             if response.status_code == 429:
