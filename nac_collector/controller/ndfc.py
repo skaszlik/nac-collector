@@ -784,17 +784,9 @@ class CiscoClientNDFC(CiscoClientController):
         try:
             logger.debug("Fetching all policies from endpoint: %s", endpoint_url)
 
-            # NOTE: this endpoint's URL carries a "/pagination" suffix and accepts
-            # "offset"/"limit" query params, but verified against a live NDFC 12.x
-            # (ND-hosted) instance it ignores both and always returns the complete,
-            # fabric-scoped policy set in a single response. Using
-            # fetch_data_pagination() here previously caused an infinite loop:
-            # since the response is never truncated below the assumed page size,
-            # the loop's only termination check (len(page) < limit) was never
-            # satisfied, so "offset" grew without bound and the same full result
-            # set was re-fetched and re-appended forever (see issue #272).
-            # A single fetch_data() call already retrieves 100% of the data.
-            all_policies_data = self.fetch_data(endpoint_url)
+            # The policies endpoint is paginated; use the parent class pagination
+            # helper so all pages are retrieved (fabrics can hold large policy sets).
+            all_policies_data = self.fetch_data_pagination(endpoint_url)
 
             if all_policies_data is not None:
                 logger.info("Successfully retrieved all policies data")
