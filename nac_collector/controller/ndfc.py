@@ -119,9 +119,23 @@ class CiscoClientNDFC(CiscoClientController):
         # This is the ONLY hardcoded endpoint - authentication endpoint
         auth_endpoint = "/login"
         auth_url = f"{self.base_url}{auth_endpoint}"
-        auth_data = {"username": self.username, "password": self.password}
+        # NOTE: Nexus Dashboard's shared platform /login endpoint (also used by
+        # CiscoClientNDO) only honors the authentication domain when the
+        # credential keys are "userName"/"userPasswd" (camelCase). Sending
+        # lowercase "username"/"password" causes ND to silently ignore the
+        # "domain" field and fall back to local-domain auth semantics, which
+        # breaks authentication for any account that only exists in a
+        # non-local domain (LDAP/RADIUS/TACACS+/SAML realm, etc.).
+        auth_data = {
+            "userName": self.username,
+            "userPasswd": self.password,
+            "domain": self.domain,
+        }
+        # auth_data = {"username": self.username, "password": self.password}
 
-        logger.info("Authenticating with NDFC at %s", auth_url)
+        logger.info(
+            "Authenticating with NDFC at %s (domain: %s)", auth_url, self.domain
+        )
 
         try:
             response = self.client.post(auth_url, json=auth_data)
