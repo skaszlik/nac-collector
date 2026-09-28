@@ -1623,7 +1623,8 @@ class CiscoClientNDFC(CiscoClientController):
     ) -> None:
         """
         Process VRF_Attachments children endpoints for VRF_Configuration.
-        Only processes vrfs with vrfStatus = "DEPLOYED".
+        Processes vrfs regardless of vrfStatus so that attachments are still
+        collected when a vrf is OUT-OF-SYNC / PENDING (only vrfName is required).
 
         Parameters:
             parent_endpoint (dict): The parent Network_Configuration endpoint.
@@ -1659,9 +1660,11 @@ class CiscoClientNDFC(CiscoClientController):
                 vrf_status = vrf.get("vrfStatus")
                 vrf_name = vrf.get("vrfName")
 
-                if vrf_status == "DEPLOYED" and vrf_name:
+                if vrf_name:
                     logger.info(
-                        "Processing VRF_Attachments for deployed vrf: %s", vrf_name
+                        "Processing VRF_Attachments for vrf: %s (status: %s)",
+                        vrf_name,
+                        vrf_status,
                     )
 
                     # Build the attachment endpoint URL
@@ -1717,21 +1720,16 @@ class CiscoClientNDFC(CiscoClientController):
                         )
                         vrf["vrf_attach_group"] = []
                 else:
-                    if vrf_status != "DEPLOYED":
-                        logger.debug(
-                            "Skipping vrf %s with status: %s",
-                            vrf_name or "unnamed",
-                            vrf_status,
-                        )
-                    else:
-                        logger.debug("Skipping vrf with missing vrfName")
+                    logger.debug("Skipping vrf with missing vrfName")
 
     def _process_network_attachments(
         self, parent_endpoint: dict[str, Any], endpoint_dict: dict[str, Any]
     ) -> None:
         """
         Process Network_Attachments children endpoints for Network_Configuration.
-        Only processes networks with networkStatus = "DEPLOYED".
+        Processes networks regardless of networkStatus so that attachments are
+        still collected when a network is OUT-OF-SYNC / PENDING (only
+        networkName is required).
 
         Parameters:
             parent_endpoint (dict): The parent Network_Configuration endpoint.
@@ -1767,10 +1765,11 @@ class CiscoClientNDFC(CiscoClientController):
                 network_status = network.get("networkStatus")
                 network_name = network.get("networkName")
 
-                if network_status == "DEPLOYED" and network_name:
+                if network_name:
                     logger.info(
-                        "Processing Network_Attachments for deployed network: %s",
+                        "Processing Network_Attachments for network: %s (status: %s)",
                         network_name,
+                        network_status,
                     )
 
                     # Build the attachment endpoint URL
@@ -1829,14 +1828,7 @@ class CiscoClientNDFC(CiscoClientController):
                         )
                         network["network_attach_group"] = []
                 else:
-                    if network_status != "DEPLOYED":
-                        logger.debug(
-                            "Skipping network %s with status: %s",
-                            network_name or "unnamed",
-                            network_status,
-                        )
-                    else:
-                        logger.debug("Skipping network with missing networkName")
+                    logger.debug("Skipping network with missing networkName")
 
     def _process_vpc_pairs_children(
         self, parent_endpoint: dict[str, Any], endpoint_dict: dict[str, Any]
