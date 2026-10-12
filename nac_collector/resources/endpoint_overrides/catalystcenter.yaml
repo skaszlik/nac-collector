@@ -21,7 +21,6 @@ remove_endpoints:
 - fabric_multicast_virtual_network
 - global_credential_netconf
 - integrate_ise
-- wireless_profile_site_tag
 - assign_templates_to_tag
 
 # Extra endpoints not present in the Terraform provider definitions
