@@ -46,6 +46,8 @@ class CiscoClientNDFC(CiscoClientController):
         "AccessPortChannel",
         "RoutedEthernetPorts",
         "L3PortChannel",
+        "RoutedSubInterfaces",
+        "Dot1qTunnelHostPorts",
         "TrunkPortChannelMembers",
         "vPCTrunkPortChannelMembers",
         "AccessPortChannelMembers",

@@ -50,6 +50,16 @@
     children:
     - name: L3PortChannelSetting
       endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/globalInterface/pti/nvpairs?serialNumber={{serialNumber}}&interfaceName={{ifName}}&policyName=int_l3_port_channel
+  - name: RoutedSubInterfaces
+    endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/globalInterface?filter=underlayPolicies%3D%3Dint_subif%26%26sysName%3D%3D{{sysName}}&navId={{fabricID}}
+    children:
+    - name: RoutedSubInterfaceSetting
+      endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/globalInterface/pti/nvpairs?serialNumber={{serialNumber}}&interfaceName={{ifName}}&policyName=int_subif
+  - name: Dot1qTunnelHostPorts
+    endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/globalInterface?filter=underlayPolicies%3D%3Dint_dot1q_tunnel_host%26%26sysName%3D%3D{{sysName}}&navId={{fabricID}}
+    children:
+    - name: Dot1qTunnelHostInterfaceSetting
+      endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/globalInterface/pti/nvpairs?serialNumber={{serialNumber}}&interfaceName={{ifName}}&policyName=int_dot1q_tunnel_host
   - name: TrunkPortChannelMembers
     endpoint: /appcenter/cisco/ndfc/api/v1/lan-fabric/rest/globalInterface?filter=underlayPolicies%3D%3Dint_port_channel_trunk_member_11_1%26%26sysName%3D%3D{{sysName}}&navId={{fabricID}}
     children:
