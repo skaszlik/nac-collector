@@ -70,16 +70,8 @@ class CiscoClientNDFC(CiscoClientController):
 
     ROUTED_PORT_INTERFACE_TYPE = "RoutedEthernetPorts"
     ROUTED_PORT_SETTING_KEY = "RoutedInterfaceSetting"
-    UNUSED_PORT_POLICY_PRIORITY = "450"
-    ROUTED_PORT_INTENT_FIELDS = (
-        "IP",
-        "DESC",
-        "CONF",
-        "ROUTING_TAG",
-        "QOS_POLICY",
-        "QUEUING_POLICY",
-        "NETFLOW_MONITOR",
-    )
+    ROUTED_PORT_TEMPLATE_ENDPOINT = "/appcenter/cisco/ndfc/api/v1/configtemplate/rest/config/templates/int_routed_host"
+    ROUTED_PORT_IDENTITY_PARAMETERS = ("INTF_NAME",)
 
     def __init__(self, **kwargs: Any) -> None:
         """
@@ -106,6 +98,8 @@ class CiscoClientNDFC(CiscoClientController):
         self.fabric_id: Any | None = (
             None  # Store fabric ID for endpoint variable replacement
         )
+        self.routed_port_template_defaults: dict[str, str] | None = None
+        self.routed_port_template_loaded = False
         self.exclude_templates: list[str] = (
             self.EXCLUDE_TEMPLATES
         )  # Template names to exclude from policies filtering
@@ -1614,15 +1608,60 @@ class CiscoClientNDFC(CiscoClientController):
                         )
                         switch["interfaces"][child_name] = []
 
+    @staticmethod
+    def _normalize_template_value(value: Any) -> str:
+        """Normalize an nvPair / template default for comparison."""
+        return str(value if value is not None else "").strip().lower()
+
+    def _get_routed_port_template_defaults(self) -> dict[str, str] | None:
+        """
+        Return {parameter: default} for the user-facing parameters of the
+        int_routed_host template, read once per run from NDFC's template API.
+
+        Internal parameters (annotation IsInternal=true) and identity parameters
+        (interface name) are excluded. Parameters without a default map to "".
+
+        Returns:
+            dict | None: Template defaults, or None if the template could not be read.
+        """
+        if self.routed_port_template_loaded:
+            return self.routed_port_template_defaults
+        self.routed_port_template_loaded = True
+        template = self.fetch_data(self.ROUTED_PORT_TEMPLATE_ENDPOINT)
+        parameters = template.get("parameters") if isinstance(template, dict) else None
+        if not isinstance(parameters, list) or not parameters:
+            logger.warning(
+                "Could not read the int_routed_host template; unused routed ports "
+                "will not be filtered out"
+            )
+            return None
+        defaults: dict[str, str] = {}
+        for parameter in parameters:
+            if not isinstance(parameter, dict) or not parameter.get("name"):
+                continue
+            annotations = parameter.get("annotations") or {}
+            if str(annotations.get("IsInternal", "")).lower() == "true":
+                continue
+            if parameter["name"] in self.ROUTED_PORT_IDENTITY_PARAMETERS:
+                continue
+            meta_properties = parameter.get("metaProperties") or {}
+            defaults[parameter["name"]] = self._normalize_template_value(
+                meta_properties.get("defaultValue")
+            )
+        self.routed_port_template_defaults = defaults
+        return defaults
+
     def _is_unused_routed_port(self, interface_entry: dict[str, Any]) -> bool:
         """
-        Return True if a routed host port only carries NDFC's placeholder policy for an
-        unused port (priority 450, no IP/description/freeform/VRF/QoS/netflow intent).
+        Return True if a routed host port carries no configuration, i.e. every
+        user-facing int_routed_host parameter in its nvPairs equals the template
+        default (NDFC's policy for an unused port).
 
         Decided from the port's intent (RoutedInterfaceSetting nvPairs), never from the
-        operational ipAddress. If the nvPairs could not be fetched, fall back to the
-        operational ipAddress so a failed fetch cannot flood the output with
-        placeholder ports.
+        operational ipAddress. A parameter absent from the nvPairs is treated as default;
+        INTF_VRF "default" is equivalent to empty (global routing table). If the
+        nvPairs could not be fetched, fall back to the operational ipAddress so a failed
+        fetch cannot flood the output; if the template cannot be read, keep the port.
 
         Parameters:
             interface_entry (dict): A RoutedEthernetPorts globalInterface entry with its
@@ -1634,20 +1673,24 @@ class CiscoClientNDFC(CiscoClientController):
         setting = interface_entry.get(self.ROUTED_PORT_SETTING_KEY)
         if not isinstance(setting, dict) or not setting:
             return not interface_entry.get("ipAddress")
-        if str(setting.get("PRIORITY", "")) != self.UNUSED_PORT_POLICY_PRIORITY:
+        defaults = self._get_routed_port_template_defaults()
+        if defaults is None:
             return False
-        if str(setting.get("INTF_VRF") or "") not in ("", "default"):
-            return False
-        return not any(
-            str(setting.get(field) or "").strip()
-            for field in self.ROUTED_PORT_INTENT_FIELDS
-        )
+        for name, default in defaults.items():
+            if name not in setting:
+                continue
+            value = self._normalize_template_value(setting[name])
+            if name == "INTF_VRF" and value in ("", "default"):
+                continue
+            if value != default:
+                return False
+        return True
 
     def _filter_unused_routed_ports(
         self, interfaces: list[Any], sys_name: str | None
     ) -> list[Any]:
         """
-        Drop NDFC placeholder policies for unused ports from RoutedEthernetPorts.
+        Drop routed ports without configuration (template-default nvPairs) from RoutedEthernetPorts.
 
         Parameters:
             interfaces (list): RoutedEthernetPorts entries (nvPairs already attached).
@@ -1664,7 +1707,7 @@ class CiscoClientNDFC(CiscoClientController):
         dropped = len(interfaces) - len(kept)
         if dropped:
             logger.info(
-                "Dropped %d unused (NDFC placeholder) routed ports on switch %s",
+                "Dropped %d unconfigured routed ports (all int_routed_host template defaults) on switch %s",
                 dropped,
                 sys_name,
             )
