@@ -68,6 +68,19 @@ class CiscoClientNDFC(CiscoClientController):
         "Default_Network_Extension_Universal",
     ]
 
+    ROUTED_PORT_INTERFACE_TYPE = "RoutedEthernetPorts"
+    ROUTED_PORT_SETTING_KEY = "RoutedInterfaceSetting"
+    UNUSED_PORT_POLICY_PRIORITY = "450"
+    ROUTED_PORT_INTENT_FIELDS = (
+        "IP",
+        "DESC",
+        "CONF",
+        "ROUTING_TAG",
+        "QOS_POLICY",
+        "QUEUING_POLICY",
+        "NETFLOW_MONITOR",
+    )
+
     def __init__(self, **kwargs: Any) -> None:
         """
         Initialize NDFC Controller client.
@@ -1561,6 +1574,19 @@ class CiscoClientNDFC(CiscoClientController):
                                         child_endpoint, processed_interfaces, sys_name
                                     )
 
+                                if child_name == self.ROUTED_PORT_INTERFACE_TYPE:
+                                    processed_interfaces = (
+                                        self._filter_unused_routed_ports(
+                                            processed_interfaces, sys_name
+                                        )
+                                    )
+                                    if processed_interfaces:
+                                        switch["interfaces"][child_name] = (
+                                            processed_interfaces
+                                        )
+                                    else:
+                                        del switch["interfaces"][child_name]
+
                             logger.debug("Processed child name: %s", child_name)
 
                             logger.info(
@@ -1587,6 +1613,62 @@ class CiscoClientNDFC(CiscoClientController):
                             str(e),
                         )
                         switch["interfaces"][child_name] = []
+
+    def _is_unused_routed_port(self, interface_entry: dict[str, Any]) -> bool:
+        """
+        Return True if a routed host port only carries NDFC's placeholder policy for an
+        unused port (priority 450, no IP/description/freeform/VRF/QoS/netflow intent).
+
+        Decided from the port's intent (RoutedInterfaceSetting nvPairs), never from the
+        operational ipAddress. If the nvPairs could not be fetched, fall back to the
+        operational ipAddress so a failed fetch cannot flood the output with
+        placeholder ports.
+
+        Parameters:
+            interface_entry (dict): A RoutedEthernetPorts globalInterface entry with its
+                RoutedInterfaceSetting child attached.
+
+        Returns:
+            bool: True if the port should be dropped from the collection.
+        """
+        setting = interface_entry.get(self.ROUTED_PORT_SETTING_KEY)
+        if not isinstance(setting, dict) or not setting:
+            return not interface_entry.get("ipAddress")
+        if str(setting.get("PRIORITY", "")) != self.UNUSED_PORT_POLICY_PRIORITY:
+            return False
+        if str(setting.get("INTF_VRF") or "") not in ("", "default"):
+            return False
+        return not any(
+            str(setting.get(field) or "").strip()
+            for field in self.ROUTED_PORT_INTENT_FIELDS
+        )
+
+    def _filter_unused_routed_ports(
+        self, interfaces: list[Any], sys_name: str | None
+    ) -> list[Any]:
+        """
+        Drop NDFC placeholder policies for unused ports from RoutedEthernetPorts.
+
+        Parameters:
+            interfaces (list): RoutedEthernetPorts entries (nvPairs already attached).
+            sys_name (str | None): The sysName (logicalName) of the switch, for logging.
+
+        Returns:
+            list: The routed host ports that carry user intent.
+        """
+        kept = [
+            entry
+            for entry in interfaces
+            if isinstance(entry, dict) and not self._is_unused_routed_port(entry)
+        ]
+        dropped = len(interfaces) - len(kept)
+        if dropped:
+            logger.info(
+                "Dropped %d unused (NDFC placeholder) routed ports on switch %s",
+                dropped,
+                sys_name,
+            )
+        return kept
 
     def _process_interface_data(self, interface_data: Any) -> list[Any]:
         """
