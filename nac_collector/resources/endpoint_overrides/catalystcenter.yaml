@@ -15,16 +15,12 @@ remove_endpoints:
 - fabric_multicast_virtual_networks
 - provision_devices
 - provision_device
-- ap_profile
 - apply_pending_fabric_events
 - device
 - discovery
-- dot11be_profile
-- extranet_policy
 - fabric_multicast_virtual_network
 - global_credential_netconf
 - integrate_ise
-- wireless_profile_site_tag
 - assign_templates_to_tag
 
 # Extra endpoints not present in the Terraform provider definitions
@@ -120,7 +116,7 @@ overrides:
   endpoint: /dna/intent/api/v1/image/importation
 
 - name: ip_pool
-  endpoint: /api/v2/ippool
+  endpoint: /api/v2/ippool?limit=500
   import_id_attributes:
     - name: id
 
